@@ -6,8 +6,8 @@ import {defineConfig} from 'vite';
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
-    // Replace 'ReviewHub' with your exact GitHub repository name
-    base: process.env.NODE_ENV === 'production' ? '/ReviewHub/' : '/',
+    // GitHub Pages base path — matches repo name: LanceTan2006/ReviewHub-System
+    base: process.env.NODE_ENV === 'production' ? '/ReviewHub-System/' : '/',
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

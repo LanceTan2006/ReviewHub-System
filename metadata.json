@@ -1,0 +1,6 @@
+{
+  "name": "ReviewHub - Meliora Learning Hub",
+  "description": "AI-powered exam preparation and learning management platform for college students, review centers, and working students.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

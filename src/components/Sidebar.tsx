@@ -47,6 +47,7 @@ const NAV_ITEMS: Record<UserRole, NavItem[]> = {
 
   frontdesk: [
     { id: 'frontdesk-dashboard',   label: 'Dashboard',            icon: 'bi-speedometer2',   section: 'Main' },
+    { id: 'manager-users',          label: 'Student Accounts',     icon: 'bi-people-fill',    section: 'Operations' },
     { id: 'frontdesk-students',    label: 'Student Management',   icon: 'bi-people',         section: 'Operations' },
     { id: 'frontdesk-enrollment',  label: 'Enrollment Management',icon: 'bi-clipboard-plus' },
     { id: 'frontdesk-payments',    label: 'Payment Management',   icon: 'bi-cash-stack' },

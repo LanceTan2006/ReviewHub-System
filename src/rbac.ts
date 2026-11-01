@@ -257,7 +257,7 @@ export const PAGE_PERMISSIONS: Partial<Record<ActivePage, Permission>> = {
 
   // Manager area
   'manager-dashboard':     'read',
-  'manager-users':         'manage_users',
+  'manager-users':         'manage_students',
   'manager-students':      'manage_students',
   'manager-packages':      'manage_packages',
   'manager-enrollment':    'monitor_enrollment',

@@ -3,9 +3,10 @@
  * Lists all system users; allows assigning/removing roles.
  * Only users with the `assign_roles` permission can modify roles.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { UserRole, UserManagementRecord } from '../types';
 import { AuthUser, hasPermission, ROLE_PERMISSIONS } from '../rbac';
+import { supabase } from '../lib/supabase';
 import { Card, CardBody, CardHeader } from '../components/Card';
 import { Button } from '../components/Button';
 import { Modal } from '../components/Modal';
@@ -48,12 +49,54 @@ export const UserManagementPage: React.FC<UserManagementPageProps> = ({
   currentUser,
   onShowToast,
 }) => {
-  const canAssignRoles = hasPermission(currentUser, 'assign_roles');
-  const [users, setUsers]             = useState<UserManagementRecord[]>(INITIAL_USERS);
+  const canAssignRoles = hasPermission(currentUser, 'assign_roles') || hasPermission(currentUser, 'manage_students');
+  const canManageUsers = hasPermission(currentUser, 'manage_users') || hasPermission(currentUser, 'manage_students') || canAssignRoles;
+  const [users, setUsers] = useState<UserManagementRecord[]>(INITIAL_USERS);
   const [searchQuery, setSearchQuery] = useState('');
   const [editingUser, setEditingUser] = useState<UserManagementRecord | null>(null);
-  const [editRoles, setEditRoles]     = useState<UserRole[]>([]);
+  const [editRoles, setEditRoles] = useState<UserRole[]>([]);
   const [showPermModal, setShowPermModal] = useState<UserRole | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newStudent, setNewStudent] = useState({ name: '', email: '', password: '' });
+
+  useEffect(() => {
+    const loadUsers = async () => {
+      if (!supabase) {
+        setUsers(INITIAL_USERS);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, is_active, created_at, user_roles(role_id, roles(name))')
+        .order('created_at', { ascending: false });
+
+      if (error || !data) {
+        setUsers(INITIAL_USERS);
+        return;
+      }
+
+      const mapped = data.map((profile: any) => {
+        const roles = (profile.user_roles ?? [])
+          .map((ur: any) => ur.roles?.name)
+          .filter((role): role is UserRole => Boolean(role) && ['student', 'frontdesk', 'proctor', 'manager'].includes(role));
+
+        return {
+          id: profile.id,
+          name: profile.full_name,
+          email: profile.email,
+          roles: roles.length > 0 ? roles : ['student'],
+          status: profile.is_active ? 'Active' : 'Suspended',
+          lastLogin: 'Recently',
+          createdAt: new Date(profile.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        } satisfies UserManagementRecord;
+      });
+
+      setUsers(mapped.length > 0 ? mapped : INITIAL_USERS);
+    };
+
+    loadUsers();
+  }, []);
 
   const filtered = users.filter((u) =>
     u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -62,7 +105,7 @@ export const UserManagementPage: React.FC<UserManagementPageProps> = ({
 
   const openRoleEditor = (user: UserManagementRecord) => {
     if (!canAssignRoles) {
-      onShowToast('Insufficient Permission', 'Only managers with assign_roles permission can modify user roles.', 'error');
+      onShowToast('Insufficient Permission', 'Only staff with role editing permission can modify user roles.', 'error');
       return;
     }
     setEditingUser(user);
@@ -75,36 +118,136 @@ export const UserManagementPage: React.FC<UserManagementPageProps> = ({
     );
   };
 
-  const saveRoles = () => {
+  const saveRoles = async () => {
     if (!editingUser) return;
     if (editRoles.length === 0) {
       onShowToast('At Least One Role Required', 'A user must have at least one role assigned.', 'error');
       return;
     }
-    setUsers((prev) =>
-      prev.map((u) => u.id === editingUser.id ? { ...u, roles: editRoles } : u)
-    );
-    onShowToast('Roles Updated', `Roles for ${editingUser.name} have been saved.`, 'success');
-    setEditingUser(null);
+
+    try {
+      if (supabase) {
+        const { data: roleRows } = await supabase.from('roles').select('id, name').in('name', editRoles);
+        const mappedRoles = (roleRows ?? []).map((role) => ({ profile_id: editingUser.id, role_id: role.id }));
+        await supabase.from('user_roles').delete().eq('profile_id', editingUser.id);
+        if (mappedRoles.length > 0) {
+          const { error } = await supabase.from('user_roles').insert(mappedRoles);
+          if (error) throw error;
+        }
+      }
+
+      setUsers((prev) =>
+        prev.map((u) => u.id === editingUser.id ? { ...u, roles: editRoles } : u)
+      );
+      onShowToast('Roles Updated', `Roles for ${editingUser.name} have been saved.`, 'success');
+      setEditingUser(null);
+    } catch (error: any) {
+      console.error('Role update failed:', error);
+      onShowToast('Role Update Failed', error?.message ?? 'Unable to update roles in Supabase.', 'error');
+    }
   };
 
-  const toggleStatus = (userId: string) => {
+  const toggleStatus = async (userId: string) => {
     if (!canAssignRoles) {
-      onShowToast('Insufficient Permission', 'Only managers can suspend or reactivate users.', 'error');
+      onShowToast('Insufficient Permission', 'Only staff with permission to manage users can suspend or reactivate accounts.', 'error');
       return;
     }
-    setUsers((prev) =>
-      prev.map((u) => u.id === userId
-        ? { ...u, status: u.status === 'Active' ? 'Suspended' : 'Active' }
-        : u
-      )
-    );
+
     const user = users.find((u) => u.id === userId);
-    onShowToast(
-      user?.status === 'Active' ? 'User Suspended' : 'User Reactivated',
-      `${user?.name} account status updated.`,
-      'info'
-    );
+    const nextStatus = user?.status === 'Active' ? 'Suspended' : 'Active';
+
+    try {
+      if (supabase) {
+        await supabase.from('profiles').update({ is_active: nextStatus === 'Active' }).eq('id', userId);
+      }
+
+      setUsers((prev) =>
+        prev.map((u) => u.id === userId ? { ...u, status: nextStatus } : u)
+      );
+      onShowToast(
+        nextStatus === 'Active' ? 'User Reactivated' : 'User Suspended',
+        `${user?.name} account status updated.`,
+        'info'
+      );
+    } catch (error: any) {
+      console.error('Status update failed:', error);
+      onShowToast('Status Update Failed', error?.message ?? 'Unable to update the user status.', 'error');
+    }
+  };
+
+  const handleCreateStudentAccount = async () => {
+    if (!canManageUsers) {
+      onShowToast('Insufficient Permission', 'Only staff with user management rights can create student accounts.', 'error');
+      return;
+    }
+
+    const email = newStudent.email.trim();
+    const name = newStudent.name.trim();
+    const password = newStudent.password.trim();
+
+    if (!name || !email || !password) {
+      onShowToast('Missing Details', 'Please provide the student name, email, and password.', 'error');
+      return;
+    }
+
+    if (!supabase) {
+      onShowToast('Supabase Not Configured', 'Add the VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY environment variables before creating accounts.', 'error');
+      return;
+    }
+
+    try {
+      const { data: existingUser, error: existingError } = await supabase
+        .from('profiles')
+        .select('id')
+        .ilike('email', email)
+        .maybeSingle();
+
+      if (existingError) throw existingError;
+      if (existingUser) {
+        onShowToast('Duplicate Account', 'A profile with that email already exists.', 'error');
+        return;
+      }
+
+      const { data: newProfile, error: profileError } = await supabase
+        .from('profiles')
+        .insert([{ full_name: name, email, password_hash: password, is_active: true }])
+        .select('id, full_name, email, is_active, created_at')
+        .single();
+
+      if (profileError || !newProfile) throw profileError ?? new Error('Student profile creation failed.');
+
+      const { data: studentRole, error: roleLookupError } = await supabase
+        .from('roles')
+        .select('id')
+        .eq('name', 'student')
+        .maybeSingle();
+
+      if (roleLookupError) throw roleLookupError;
+      if (!studentRole) throw new Error('The student role does not exist in the database.');
+
+      const { error: assignError } = await supabase
+        .from('user_roles')
+        .insert([{ profile_id: newProfile.id, role_id: studentRole.id }]);
+
+      if (assignError) throw assignError;
+
+      setUsers((prev) => [{
+        id: newProfile.id,
+        name: newProfile.full_name,
+        email: newProfile.email,
+        roles: ['student'],
+        status: newProfile.is_active ? 'Active' : 'Suspended',
+        lastLogin: 'Recently',
+        createdAt: new Date(newProfile.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      }, ...prev]);
+
+      setNewStudent({ name: '', email: '', password: '' });
+      setShowCreateModal(false);
+      onShowToast('Student Account Created', `${name} can now sign in with the student role.`, 'success');
+    } catch (error: any) {
+      console.error('Create student failed:', error);
+      onShowToast('Student Creation Failed', error?.message ?? 'Unable to create the student account.', 'error');
+    }
   };
 
   return (
@@ -114,17 +257,23 @@ export const UserManagementPage: React.FC<UserManagementPageProps> = ({
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-[#7C3AED] mb-1">
             <i className="bi bi-people-fill" aria-hidden="true" />
-            Manager Console — RBAC Administration
+            Staff Console — Student Access Management
           </div>
           <h1 className="text-2xl font-extrabold text-[#2C3E50]">User Management</h1>
           <p className="text-sm text-[#64748B] mt-0.5">
-            Assign and remove roles. Effective permissions are the union of all assigned roles.
+            Create student accounts, assign roles, and manage access. Effective permissions are the union of all assigned roles.
           </p>
         </div>
+        {canManageUsers && (
+          <Button variant="primary" size="md" onClick={() => setShowCreateModal(true)}>
+            <i className="bi bi-person-plus-fill mr-2" aria-hidden="true" />
+            Create Student Account
+          </Button>
+        )}
         {!canAssignRoles && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-700 font-semibold">
             <i className="bi bi-exclamation-triangle-fill" aria-hidden="true" />
-            Read-only — no assign_roles permission
+            Read-only access
           </div>
         )}
       </div>
@@ -350,6 +499,56 @@ export const UserManagementPage: React.FC<UserManagementPageProps> = ({
                 })()}
               </div>
             )}
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Create Student Account Modal ───────────────────── */}
+      {showCreateModal && (
+        <Modal
+          isOpen={showCreateModal}
+          onClose={() => setShowCreateModal(false)}
+          title="Create Student Account"
+          subtitle="Create a new student profile and grant student access to the portal."
+          maxWidth="md"
+          footer={
+            <>
+              <Button variant="secondary" size="md" onClick={() => setShowCreateModal(false)}>Cancel</Button>
+              <Button variant="primary" size="md" onClick={handleCreateStudentAccount}>Create Account</Button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-[#2C3E50] mb-1">Full Name</label>
+              <input
+                type="text"
+                value={newStudent.name}
+                onChange={(e) => setNewStudent((prev) => ({ ...prev, name: e.target.value }))}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[#D6ECFA] bg-[#F4FAFD] focus:outline-none focus:ring-2 focus:ring-[#3498DB]"
+                placeholder="e.g. John Dela Cruz"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-[#2C3E50] mb-1">Email</label>
+              <input
+                type="email"
+                value={newStudent.email}
+                onChange={(e) => setNewStudent((prev) => ({ ...prev, email: e.target.value }))}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[#D6ECFA] bg-[#F4FAFD] focus:outline-none focus:ring-2 focus:ring-[#3498DB]"
+                placeholder="student@email.com"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-[#2C3E50] mb-1">Temporary Password</label>
+              <input
+                type="text"
+                value={newStudent.password}
+                onChange={(e) => setNewStudent((prev) => ({ ...prev, password: e.target.value }))}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[#D6ECFA] bg-[#F4FAFD] focus:outline-none focus:ring-2 focus:ring-[#3498DB]"
+                placeholder="Create a password"
+              />
+            </div>
           </div>
         </Modal>
       )}

@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivePage, ReviewPackage, Lesson, PaymentTransaction } from './types';
 import { reviewPackages, sampleLessons, samplePaymentTransactions } from './data/mockData';
+import { supabase } from './lib/supabase';
+import { loadSiteData } from './lib/siteData';
 import {
   AuthUser, PAGE_PERMISSIONS, ROLE_HOME,
-  hasPermission, buildAuthUser,
+  hasPermission,
 } from './rbac';
 
 import { Navbar }               from './components/Navbar';
@@ -45,6 +47,25 @@ export default function App() {
   const [transactions,setTransactions]   = useState<PaymentTransaction[]>(samplePaymentTransactions);
   const [toasts,      setToasts]         = useState<ToastMessage[]>([]);
   const [mobileSidebar,setMobileSidebar] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const hydrateSiteData = async () => {
+      const siteData = await loadSiteData();
+      if (!cancelled) {
+        setPackages(siteData.packages);
+        setLessons(siteData.lessons);
+        setTransactions(siteData.transactions.length ? siteData.transactions : samplePaymentTransactions);
+      }
+    };
+
+    hydrateSiteData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // ── Toast ───────────────────────────────────────────────────
   const showToast = (title: string, desc?: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -98,11 +119,99 @@ export default function App() {
   };
 
   // ── Package / Lesson / Transaction handlers ─────────────────
-  const handleAddPackage     = (p: ReviewPackage)   => setPackages((prev) => [p, ...prev]);
-  const handleUpdatePackage  = (p: ReviewPackage)   => setPackages((prev) => prev.map((x) => x.id === p.id ? p : x));
-  const handleDeletePackage  = (id: string)         => setPackages((prev) => prev.filter((x) => x.id !== id));
-  const handleAddLesson      = (l: Lesson)          => setLessons((prev) => [l, ...prev]);
-  const handleVerifyTx       = (id: string)         => setTransactions((prev) => prev.map((t) => t.id === id ? { ...t, status: 'Verified' as const } : t));
+  const handleAddPackage = async (p: ReviewPackage) => {
+    if (supabase) {
+      const { error } = await supabase.from('review_packages').insert([
+        {
+          slug: p.id,
+          title: p.title,
+          subtitle: p.targetAudience,
+          description: p.description,
+          price: Number(String(p.price).replace(/[^0-9.]/g, '')) || 0,
+          period: p.period,
+          category: p.category,
+          is_popular: Boolean(p.popular),
+          total_modules: p.totalModules,
+          mock_exam_count: p.mockExamsCount,
+          features: p.features,
+          status: 'active',
+        },
+      ]);
+
+      if (!error) {
+        setPackages((prev) => [p, ...prev]);
+        return;
+      }
+    }
+
+    setPackages((prev) => [p, ...prev]);
+  };
+
+  const handleUpdatePackage = async (p: ReviewPackage) => {
+    if (supabase) {
+      const { error } = await supabase.from('review_packages').update({
+        title: p.title,
+        subtitle: p.targetAudience,
+        description: p.description,
+        price: Number(String(p.price).replace(/[^0-9.]/g, '')) || 0,
+        period: p.period,
+        category: p.category,
+        is_popular: Boolean(p.popular),
+        total_modules: p.totalModules,
+        mock_exam_count: p.mockExamsCount,
+        features: p.features,
+      }).eq('id', p.id);
+
+      if (!error) {
+        setPackages((prev) => prev.map((x) => x.id === p.id ? p : x));
+        return;
+      }
+    }
+
+    setPackages((prev) => prev.map((x) => x.id === p.id ? p : x));
+  };
+
+  const handleDeletePackage = async (id: string) => {
+    if (supabase) {
+      await supabase.from('review_packages').delete().eq('id', id);
+    }
+
+    setPackages((prev) => prev.filter((x) => x.id !== id));
+  };
+
+  const handleAddLesson = async (l: Lesson) => {
+    if (supabase) {
+      const { error } = await supabase.from('lessons').insert([
+        {
+          title: l.title,
+          subject: l.subject,
+          duration: l.duration,
+          completed: l.completed,
+          progress_percent: l.progressPercent,
+          instructor: l.instructor,
+          materials_count: l.materialsCount,
+          next_quiz_available: l.nextQuizAvailable,
+          content_summary: l.contentSummary ?? '',
+          key_takeaways: l.keyTakeaways ?? [],
+        },
+      ]);
+
+      if (!error) {
+        setLessons((prev) => [l, ...prev]);
+        return;
+      }
+    }
+
+    setLessons((prev) => [l, ...prev]);
+  };
+
+  const handleVerifyTx = async (id: string) => {
+    if (supabase) {
+      await supabase.from('payment_transactions').update({ status: 'verified' }).eq('id', id);
+    }
+
+    setTransactions((prev) => prev.map((t) => t.id === id ? { ...t, status: 'Verified' as const } : t));
+  };
 
   const handleEnrollComplete = (studentName: string, packageTitle: string, amount: string, paymentMethod: string, refNo: string) => {
     const tx: PaymentTransaction = {

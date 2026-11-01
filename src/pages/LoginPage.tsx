@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { ActivePage } from '../types';
 import { AuthUser, authenticateUser } from '../rbac';
+import { supabase } from '../lib/supabase';
 import { Card, CardBody } from '../components/Card';
 import { Button } from '../components/Button';
 import {
@@ -72,11 +73,81 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     if (isRegister) {
       if (!allOk)              { setFormError('Password does not meet all requirements.'); setPwTouched(true); return; }
       if (password !== confirmPw) { setFormError('Passwords do not match.'); return; }
-      // Simulate registration success (no real DB in demo)
-      onShowToast('Account Created!', 'You can now sign in with your credentials.', 'success');
-      setIsRegister(false);
-      setPassword(''); setConfirmPw('');
-      return;
+      if (!supabase) {
+        setFormError('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY before registering.');
+        return;
+      }
+
+      try {
+        const normalizedEmail = email.trim().toLowerCase();
+        const { data: existingUser, error: existingError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('email', normalizedEmail)
+          .maybeSingle();
+
+        if (existingError) {
+          throw existingError;
+        }
+
+        if (existingUser) {
+          setFormError('An account with that email already exists.');
+          return;
+        }
+
+        const { data: insertedProfile, error: profileError } = await supabase
+          .from('profiles')
+          .insert([
+            {
+              full_name: name.trim() || normalizedEmail,
+              email: normalizedEmail,
+              password_hash: password,
+              avatar_url: null,
+              is_active: true,
+            },
+          ])
+          .select('id')
+          .single();
+
+        if (profileError || !insertedProfile) {
+          throw profileError ?? new Error('Profile insert failed.');
+        }
+
+        const { data: studentRole, error: roleLookupError } = await supabase
+          .from('roles')
+          .select('id')
+          .eq('name', 'student')
+          .maybeSingle();
+
+        if (roleLookupError) {
+          throw roleLookupError;
+        }
+
+        if (!studentRole) {
+          throw new Error('Student role was not found in the database.');
+        }
+
+        const { error: roleInsertError } = await supabase
+          .from('user_roles')
+          .insert([{ profile_id: insertedProfile.id, role_id: studentRole.id }]);
+
+        if (roleInsertError) {
+          throw roleInsertError;
+        }
+
+        onShowToast('Account Created!', 'Your account has been saved to Supabase and can now sign in.', 'success');
+        setIsRegister(false);
+        setPassword('');
+        setConfirmPw('');
+        setName('');
+        setEmail('');
+        setFormError('');
+        return;
+      } catch (error: any) {
+        console.error('Registration failed:', error);
+        setFormError(error?.message ?? 'Unable to create the account in Supabase. Please try again.');
+        return;
+      }
     }
 
     // ── Login ────────────────────────────────────────────────

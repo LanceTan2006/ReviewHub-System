@@ -326,21 +326,22 @@ export async function authenticateUser(email: string, password: string): Promise
       .eq('profile_id', profile.id);
 
     const roleIds = (roleRows ?? []).map((row) => row.role_id).filter(Boolean);
-    let roles: UserRole[] = [];
 
-    if (roleIds.length > 0) {
-      const { data: roleData } = await supabase
-        .from('roles')
-        .select('name')
-        .in('id', roleIds);
-
-      roles = (roleData ?? [])
-        .map((row) => row.name)
-        .filter((name): name is UserRole => !!name && ['guest', 'student', 'frontdesk', 'proctor', 'manager', 'admin'].includes(name));
+    if (roleIds.length === 0) {
+      return null;
     }
 
+    const { data: roleData } = await supabase
+      .from('roles')
+      .select('name')
+      .in('id', roleIds);
+
+    const roles = (roleData ?? [])
+      .map((row) => row.name)
+      .filter((name): name is UserRole => !!name && ['guest', 'student', 'frontdesk', 'proctor', 'manager', 'admin'].includes(name));
+
     if (roles.length === 0) {
-      roles = ['student'];
+      return null;
     }
 
     return buildAuthUser(profile.id, profile.full_name, profile.email, roles);

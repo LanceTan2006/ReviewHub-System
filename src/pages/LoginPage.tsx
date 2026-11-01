@@ -155,7 +155,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     try {
       const user = await authenticateUser(email.trim(), password);
       if (!user) {
-        setFormError('Invalid email or password. Please check your credentials and try again.');
+        setFormError('Invalid email or password, or this account has no role assigned yet. Please contact the admin/front desk to assign access.');
         return;
       }
       onShowToast(

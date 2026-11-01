@@ -32,6 +32,44 @@ interface StudentEnrollmentPageProps {
   initialPackageId?: string;
 }
 
+// ── Mock current enrollment data ───────────────────────────────
+const MOCK_ENROLLMENTS = [
+  {
+    id: 'enr-001',
+    packageTitle:    'PRC Licensure Comprehensive',
+    category:        'Licensure',
+    batch:           'Batch Alpha (Nov 2026 – Morning & Weekend)',
+    enrollmentDate:  'Oct 12, 2026',
+    expiryDate:      'May 31, 2027',
+    totalModules:    68,
+    mockExams:       5,
+    progress:        74,
+    paymentStatus:   'Paid' as 'Paid' | 'Unpaid',
+    amount:          '₱7,999',
+    paymentMethod:   'GCash',
+    referenceNo:     'GCASH-998241029',
+    paymentDate:     'Oct 12, 2026',
+    status:          'Active' as 'Active' | 'Pending' | 'Expired',
+  },
+  {
+    id: 'enr-002',
+    packageTitle:    'IELTS Academic & General Training Masterclass',
+    category:        'IELTS / Language',
+    batch:           'Weekend Track 1',
+    enrollmentDate:  'Oct 25, 2026',
+    expiryDate:      'Mar 25, 2027',
+    totalModules:    50,
+    mockExams:       6,
+    progress:        18,
+    paymentStatus:   'Unpaid' as 'Paid' | 'Unpaid',
+    amount:          '₱6,999',
+    paymentMethod:   '',
+    referenceNo:     '',
+    paymentDate:     '',
+    status:          'Pending' as 'Active' | 'Pending' | 'Expired',
+  },
+];
+
 export const StudentEnrollmentPage: React.FC<StudentEnrollmentPageProps> = ({
   onNavigate,
   onShowToast,
@@ -39,10 +77,16 @@ export const StudentEnrollmentPage: React.FC<StudentEnrollmentPageProps> = ({
   onEnrollComplete,
   initialPackageId,
 }) => {
-  // Step: 1 = Student Account, 2 = Package Selection, 3 = Payment & Checkout, 4 = Confirmation Receipt
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  // 'overview' = My Enrollment summary; 'new' = multi-step wizard; 'pay' = inline payment
+  const [view, setView] = useState<'overview' | 'new' | 'pay'>(
+    initialPackageId ? 'new' : 'overview'
+  );
+  const [payingEnrollmentId, setPayingEnrollmentId] = useState<string | null>(null);
+  const [enrollments, setEnrollments] = useState(MOCK_ENROLLMENTS);
 
-  // Step 1: Account state
+  // ── Wizard step state ──────────────────────────────────────
+  // Step: 1 = Student Account, 2 = Package Selection, 3 = Payment & Checkout, 4 = Confirmation
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [isExistingUser, setIsExistingUser] = useState(false);
   const [formData, setFormData] = useState({
     fullName: 'Alyssa Reyes',
@@ -110,16 +154,290 @@ export const StudentEnrollmentPage: React.FC<StudentEnrollmentPageProps> = ({
     }, 900);
   };
 
+  // ── Inline Pay Now handler ─────────────────────────────────
+  const handlePayNow = (enrollmentId: string) => {
+    setPayingEnrollmentId(enrollmentId);
+    setView('pay');
+  };
+
+  const handleInlinePaymentComplete = () => {
+    if (!payingEnrollmentId) return;
+    setEnrollments((prev) =>
+      prev.map((e) =>
+        e.id === payingEnrollmentId
+          ? { ...e, paymentStatus: 'Paid' as const, status: 'Active' as const, paymentDate: 'Nov 1, 2026', referenceNo: `REF-${Date.now()}` }
+          : e
+      )
+    );
+    const enr = enrollments.find((e) => e.id === payingEnrollmentId);
+    if (enr) {
+      onEnrollComplete('Alyssa Reyes', enr.packageTitle, enr.amount, 'GCash', `REF-${Date.now()}`);
+      onShowToast('Payment Successful!', `${enr.packageTitle} is now fully active.`, 'success');
+    }
+    setPayingEnrollmentId(null);
+    setView('overview');
+  };
+
+  const statusBadge = (status: 'Active' | 'Pending' | 'Expired') => {
+    const map = {
+      Active:  { cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: 'bi-check-circle-fill' },
+      Pending: { cls: 'bg-amber-50 text-amber-700 border-amber-200',       icon: 'bi-clock-fill' },
+      Expired: { cls: 'bg-red-50 text-red-600 border-red-200',             icon: 'bi-x-circle-fill' },
+    };
+    const s = map[status];
+    return (
+      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border ${s.cls}`}>
+        <i className={`${s.icon} text-xs`} aria-hidden="true" /> {status}
+      </span>
+    );
+  };
+
+  const paymentBadge = (paid: 'Paid' | 'Unpaid') => (
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border ${
+      paid === 'Paid'
+        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+        : 'bg-red-50 text-red-600 border-red-200'
+    }`}>
+      <i className={`${paid === 'Paid' ? 'bi-credit-card-fill' : 'bi-exclamation-triangle-fill'} text-xs`} aria-hidden="true" />
+      {paid === 'Paid' ? 'Paid' : 'Unpaid'}
+    </span>
+  );
+
+  // ══════════════════════════════════════════════════════════
+  // VIEW: MY ENROLLMENT OVERVIEW
+  // ══════════════════════════════════════════════════════════
+  if (view === 'overview') {
+    return (
+      <div className="space-y-6 max-w-5xl mx-auto pb-12">
+        {/* Page header */}
+        <div className="bg-white p-6 rounded-2xl border border-[#E1EFF7] shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-semibold text-[#3498DB] mb-1">
+              <i className="bi bi-clipboard-check" aria-hidden="true" />
+              <span>Enrollment &amp; Payment Status</span>
+            </div>
+            <h1 className="text-2xl font-extrabold text-[#2C3E50]">My Enrollment</h1>
+            <p className="text-sm text-[#64748B] mt-0.5">
+              View your enrolled courses, batch details, and payment status all in one place.
+            </p>
+          </div>
+          <Button
+            variant="primary"
+            size="md"
+            onClick={() => { setStep(1); setView('new'); }}
+          >
+            <i className="bi bi-plus-lg mr-1.5" aria-hidden="true" />
+            Enroll in New Package
+          </Button>
+        </div>
+
+        {/* Summary strip */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {[
+            { label: 'Enrolled Courses',  value: enrollments.length,                                                  icon: 'bi-collection',                color: '#3498DB' },
+            { label: 'Active',            value: enrollments.filter((e) => e.status === 'Active').length,             icon: 'bi-check-circle-fill',         color: '#10B981' },
+            { label: 'Pending Payment',   value: enrollments.filter((e) => e.paymentStatus === 'Unpaid').length,      icon: 'bi-exclamation-triangle-fill', color: '#F59E0B' },
+            { label: 'Avg. Progress',     value: `${Math.round(enrollments.reduce((s, e) => s + e.progress, 0) / enrollments.length)}%`, icon: 'bi-graph-up-arrow', color: '#7C3AED' },
+          ].map((s) => (
+            <div key={s.label} className="bg-white p-4 rounded-2xl border border-[#E1EFF7] flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                   style={{ backgroundColor: s.color + '18' }}>
+                <i className={`${s.icon} text-lg`} style={{ color: s.color }} aria-hidden="true" />
+              </div>
+              <div>
+                <div className="text-xl font-extrabold font-mono text-[#2C3E50] leading-none">{s.value}</div>
+                <div className="text-[11px] text-[#64748B] mt-0.5">{s.label}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Enrollment cards */}
+        <div className="space-y-5">
+          {enrollments.map((enr) => (
+            <div
+              key={enr.id}
+              className={`bg-white rounded-2xl border-2 p-6 shadow-xs ${
+                enr.paymentStatus === 'Unpaid' ? 'border-amber-200' : enr.status === 'Active' ? 'border-[#E1EFF7]' : 'border-red-100'
+              }`}
+            >
+              {/* Card header */}
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-5">
+                <div className="flex items-start gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-[#D6ECFA] flex items-center justify-center shrink-0">
+                    <i className="bi bi-collection-fill text-[#3498DB] text-xl" aria-hidden="true" />
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-bold text-[#3498DB] uppercase tracking-widest mb-0.5">{enr.category}</div>
+                    <h3 className="text-base font-extrabold text-[#2C3E50] leading-tight">{enr.packageTitle}</h3>
+                    <p className="text-xs text-[#64748B] mt-0.5 flex items-center gap-1.5">
+                      <i className="bi bi-people text-[#94A3B8]" aria-hidden="true" /> {enr.batch}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap sm:justify-end">
+                  {statusBadge(enr.status)}
+                  {paymentBadge(enr.paymentStatus)}
+                </div>
+              </div>
+
+              {/* Detail grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+                {[
+                  { label: 'Enrolled On',  value: enr.enrollmentDate,         icon: 'bi-calendar-check' },
+                  { label: 'Valid Until',  value: enr.expiryDate,             icon: 'bi-calendar-x' },
+                  { label: 'Modules',      value: `${enr.totalModules} total`, icon: 'bi-journal-bookmark' },
+                  { label: 'Mock Exams',   value: `${enr.mockExams} included`, icon: 'bi-file-earmark-ruled' },
+                ].map((d) => (
+                  <div key={d.label} className="p-3 rounded-xl bg-[#F4FAFD] border border-[#E1EFF7]">
+                    <div className="text-[10px] font-bold text-[#94A3B8] uppercase tracking-widest mb-1 flex items-center gap-1">
+                      <i className={`${d.icon} text-xs`} aria-hidden="true" /> {d.label}
+                    </div>
+                    <div className="text-xs font-bold text-[#2C3E50]">{d.value}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Progress */}
+              <div className="mb-5">
+                <div className="flex items-center justify-between text-xs mb-1.5">
+                  <span className="font-semibold text-[#2C3E50]">Course Progress</span>
+                  <span className="font-bold font-mono text-[#3498DB]">{enr.progress}%</span>
+                </div>
+                <ProgressBar value={enr.progress} color={enr.progress >= 70 ? 'bg-emerald-500' : 'bg-[#3498DB]'} size="sm" />
+              </div>
+
+              {/* Payment row */}
+              <div className={`rounded-xl p-4 border ${
+                enr.paymentStatus === 'Paid' ? 'bg-emerald-50 border-emerald-100' : 'bg-amber-50 border-amber-200'
+              }`}>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className={`text-[11px] font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1.5 ${
+                      enr.paymentStatus === 'Paid' ? 'text-emerald-700' : 'text-amber-700'
+                    }`}>
+                      <i className={`${enr.paymentStatus === 'Paid' ? 'bi-credit-card-fill' : 'bi-exclamation-triangle-fill'}`} aria-hidden="true" />
+                      Payment Information
+                    </div>
+                    {enr.paymentStatus === 'Paid' ? (
+                      <div className="space-y-0.5 text-xs text-emerald-800">
+                        <div><span className="font-semibold">Amount Paid:</span> <span className="font-mono font-bold">{enr.amount}</span></div>
+                        <div><span className="font-semibold">Method:</span> {enr.paymentMethod} &nbsp;·&nbsp; <span className="font-semibold">Ref:</span> <span className="font-mono">{enr.referenceNo}</span></div>
+                        <div><span className="font-semibold">Payment Date:</span> {enr.paymentDate}</div>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-amber-800 space-y-0.5">
+                        <div className="font-bold">Amount Due: <span className="font-mono">{enr.amount}</span></div>
+                        <div className="text-amber-700">Your slot is reserved. Pay now to unlock full course access.</div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {enr.paymentStatus === 'Paid' ? (
+                      <Button variant="secondary" size="sm"
+                        onClick={() => onShowToast('Receipt Downloaded', `Official OR for ${enr.packageTitle}`, 'success')}>
+                        <i className="bi bi-download mr-1.5" aria-hidden="true" />Download Receipt
+                      </Button>
+                    ) : (
+                      <Button variant="primary" size="md" onClick={() => handlePayNow(enr.id)}>
+                        <i className="bi bi-credit-card-fill mr-1.5" aria-hidden="true" />
+                        Pay Now — {enr.amount}
+                      </Button>
+                    )}
+                    {enr.status === 'Active' && (
+                      <Button variant="outline" size="sm" onClick={() => onNavigate('student-dashboard')}>
+                        <i className="bi bi-box-arrow-in-right mr-1.5" aria-hidden="true" />Go to Course
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // VIEW: INLINE PAY NOW
+  // ══════════════════════════════════════════════════════════
+  if (view === 'pay') {
+    const enr = enrollments.find((e) => e.id === payingEnrollmentId);
+    if (!enr) { setView('overview'); return null; }
+    return (
+      <div className="max-w-2xl mx-auto pb-12 space-y-5">
+        <button onClick={() => setView('overview')}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#64748B] hover:text-[#3498DB] transition-colors cursor-pointer">
+          <ArrowLeft className="w-4 h-4" /> Back to My Enrollment
+        </button>
+
+        <div className="bg-white p-6 rounded-2xl border border-[#E1EFF7] shadow-xs">
+          <h2 className="text-xl font-extrabold text-[#2C3E50] mb-1">Complete Your Payment</h2>
+          <p className="text-sm text-[#64748B]">{enr.packageTitle} · <span className="font-bold text-[#2C3E50]">{enr.amount}</span></p>
+        </div>
+
+        <Card className="border-[#D6ECFA]">
+          <CardBody className="p-6 space-y-5">
+            <div>
+              <label className="block text-xs font-bold text-[#2C3E50] mb-2">Select Payment Method</label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {(['GCash', 'Maya', 'Credit/Debit Card', 'Bank Transfer'] as const).map((m) => (
+                  <button key={m} type="button"
+                    className="p-3 rounded-xl border-2 text-xs font-bold border-[#3498DB] bg-[#EEF7FD] text-[#2980B9] flex flex-col items-center gap-1.5 cursor-pointer hover:bg-[#D6ECFA]">
+                    <CreditCard className="w-5 h-5" />{m}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-5 rounded-2xl bg-[#F4FAFD] border border-[#D6ECFA] space-y-3">
+              <div className="flex items-center gap-4">
+                <div className="w-20 h-20 bg-[#2C3E50] rounded-xl flex items-center justify-center shrink-0">
+                  <QrCode className="w-14 h-14 text-white" />
+                </div>
+                <div className="text-xs space-y-1">
+                  <p className="font-bold text-[#2C3E50]">Merchant: Meliora Learning Hub Inc.</p>
+                  <p className="text-[#64748B]">Account: <span className="font-mono font-bold text-[#2C3E50]">0917-800-2490</span></p>
+                  <p className="text-[#64748B]">Amount: <span className="font-mono font-bold text-[#2C3E50]">{enr.amount}</span></p>
+                  <p className="text-emerald-600 font-semibold">✓ Instant verification after transfer</p>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-[#2C3E50] mb-1">Reference Number *</label>
+                <input type="text" defaultValue={`GCASH-${Date.now()}`}
+                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-[#D6ECFA] bg-white font-mono"
+                  placeholder="e.g. GCASH-889102482" />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-[#F0F6FA]">
+              <Button variant="secondary" size="md" onClick={() => setView('overview')}>Cancel</Button>
+              <Button variant="primary" size="lg" onClick={handleInlinePaymentComplete}
+                icon={<ShieldCheck className="w-5 h-5" />}>
+                Confirm Payment — {enr.amount}
+              </Button>
+            </div>
+          </CardBody>
+        </Card>
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // VIEW: NEW ENROLLMENT WIZARD (existing multi-step flow)
+  // ══════════════════════════════════════════════════════════
   return (
     <div className="max-w-4xl mx-auto py-6 pb-20 px-4 sm:px-6">
-      {/* Top Breadcrumb & Return to Landing */}
+      {/* Back to overview */}
       <div className="flex items-center justify-between mb-6">
         <button
-          onClick={() => onNavigate('landing')}
+          onClick={() => setView('overview')}
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#64748B] hover:text-[#3498DB] transition-colors cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Back to Home</span>
+          <span>Back to My Enrollment</span>
         </button>
         <span className="text-xs text-[#94A3B8] font-medium">Meliora Learning Hub Official Enrollment</span>
       </div>

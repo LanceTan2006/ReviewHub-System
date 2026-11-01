@@ -53,6 +53,11 @@ interface AdminDashboardProps {
   onAddLesson?: (lesson: Lesson) => void;
   transactions?: PaymentTransaction[];
   onVerifyPaymentTransaction?: (id: string) => void;
+  /** Which tabs to show. Defaults to all four. Use to restrict per role. */
+  visibleTabs?: Array<'roster' | 'packages' | 'lessons' | 'payments'>;
+  /** Label override for the page heading */
+  pageTitle?: string;
+  pageSubtitle?: string;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -67,7 +72,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onAddLesson,
   transactions: propTransactions,
   onVerifyPaymentTransaction,
+  visibleTabs,
+  pageTitle,
+  pageSubtitle,
 }) => {
+  const ALL_TABS: Array<'roster' | 'packages' | 'lessons' | 'payments'> = ['roster', 'packages', 'lessons', 'payments'];
+  const allowedTabs = visibleTabs ?? ALL_TABS;
   // Local state fallbacks
   const [localPackages, setLocalPackages] = useState<ReviewPackage[]>(defaultPackages);
   const packagesList = propPackages || localPackages;
@@ -78,21 +88,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [localTransactions, setLocalTransactions] = useState<PaymentTransaction[]>(defaultTransactions);
   const transactionsList = propTransactions || localTransactions;
 
-  // Active view tab in admin: 'roster' | 'packages' | 'lessons' | 'payments'
-  const [activeAdminTab, setActiveAdminTab] = useState<'roster' | 'packages' | 'lessons' | 'payments'>(
-    currentPage === 'admin-packages'
-      ? 'packages'
-      : currentPage === 'admin-lessons'
-      ? 'lessons'
-      : currentPage === 'admin-payments'
-      ? 'payments'
-      : 'roster'
-  );
+  // Active view tab — default to first allowed tab
+  const defaultTab: 'roster' | 'packages' | 'lessons' | 'payments' =
+    currentPage === 'admin-packages' && allowedTabs.includes('packages') ? 'packages' :
+    currentPage === 'admin-lessons'  && allowedTabs.includes('lessons')  ? 'lessons'  :
+    currentPage === 'admin-payments' && allowedTabs.includes('payments') ? 'payments' :
+    (allowedTabs[0] ?? 'roster');
+
+  const [activeAdminTab, setActiveAdminTab] = useState<'roster' | 'packages' | 'lessons' | 'payments'>(defaultTab);
 
   useEffect(() => {
-    if (currentPage === 'admin-packages') setActiveAdminTab('packages');
-    if (currentPage === 'admin-lessons') setActiveAdminTab('lessons');
-    if (currentPage === 'admin-payments') setActiveAdminTab('payments');
+    if (currentPage === 'admin-packages' && allowedTabs.includes('packages')) setActiveAdminTab('packages');
+    if (currentPage === 'admin-lessons'  && allowedTabs.includes('lessons'))  setActiveAdminTab('lessons');
+    if (currentPage === 'admin-payments' && allowedTabs.includes('payments')) setActiveAdminTab('payments');
   }, [currentPage]);
 
   // Students roster state
@@ -172,6 +180,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       'Vary subordinate and relative clauses to score Band 8.0+ in Grammatical Range.'
     ],
     isAiGenerating: false,
+  };
+
+  // PDF attachment state for lesson modal
+  const [lessonPdfFiles, setLessonPdfFiles] = useState<File[]>([]);
+
+  const handlePdfSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const pdfs = files.filter((f) => f.type === 'application/pdf');
+    if (pdfs.length !== files.length) {
+      onShowToast('Only PDF Files Allowed', 'Please select only .pdf files.', 'error');
+    }
+    setLessonPdfFiles((prev) => {
+      // Deduplicate by name
+      const existingNames = new Set(prev.map((f) => f.name));
+      const newUnique = pdfs.filter((f) => !existingNames.has(f.name));
+      return [...prev, ...newUnique];
+    });
+    // Reset the input so the same file can be re-selected after removal
+    e.target.value = '';
+  };
+
+  const handleRemovePdf = (fileName: string) => {
+    setLessonPdfFiles((prev) => prev.filter((f) => f.name !== fileName));
   };
 
   const [lessonForm, setLessonForm] = useState(initialLessonForm);
@@ -336,7 +367,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       completed: false,
       progressPercent: 0,
       instructor: lessonForm.instructor,
-      materialsCount: lessonForm.materialsCount,
+      // Total materials = manually entered count + attached PDFs
+      materialsCount: lessonForm.materialsCount + lessonPdfFiles.length,
       nextQuizAvailable: lessonForm.nextQuizAvailable,
       contentSummary: lessonForm.contentSummary,
       keyTakeaways: lessonForm.keyTakeaways,
@@ -349,9 +381,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
 
     setIsLessonModalOpen(false);
+    setLessonPdfFiles([]);
     onShowToast(
       'Lesson Published to Curriculum!',
-      `"${newLesson.title}" is now accessible to students.`,
+      `"${newLesson.title}" published${lessonPdfFiles.length > 0 ? ` with ${lessonPdfFiles.length} PDF attachment${lessonPdfFiles.length > 1 ? 's' : ''}` : ''}.`,
       'success'
     );
   };
@@ -377,10 +410,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <span>Meliora Review Center Operations Management</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-[#2C3E50]">
-            ReviewHub Administration Console
+            {pageTitle ?? 'ReviewHub Administration Console'}
           </h1>
           <p className="text-xs sm:text-sm text-[#64748B] mt-0.5">
-            Develop review packages, generate curriculum lessons, manage IELTS band scoring, and oversee student tuition.
+            {pageSubtitle ?? 'Develop review packages, generate curriculum lessons, manage IELTS band scoring, and oversee student tuition.'}
           </p>
         </div>
 
@@ -417,8 +450,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       </div>
 
-      {/* Sub-Navigation Tabs */}
+      {/* Sub-Navigation Tabs — only show allowed tabs */}
       <div className="flex items-center gap-2 border-b border-[#E1EFF7] pb-2 overflow-x-auto">
+        {allowedTabs.includes('roster') && (
         <button
           onClick={() => setActiveAdminTab('roster')}
           className={`px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
@@ -428,9 +462,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }`}
         >
           <Users className="w-4 h-4" />
-          <span>Student Rosters & Candidates ({students.length})</span>
+          <span>Students ({students.length})</span>
         </button>
+        )}
 
+        {allowedTabs.includes('packages') && (
         <button
           onClick={() => setActiveAdminTab('packages')}
           className={`px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
@@ -440,9 +476,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }`}
         >
           <Package className="w-4 h-4" />
-          <span>Review Packages & IELTS ({packagesList.length})</span>
+          <span>Review Packages ({packagesList.length})</span>
         </button>
+        )}
 
+        {allowedTabs.includes('lessons') && (
         <button
           onClick={() => setActiveAdminTab('lessons')}
           className={`px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
@@ -452,9 +490,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }`}
         >
           <BookOpen className="w-4 h-4" />
-          <span>Curriculum Lessons & Generator ({lessonsList.length})</span>
+          <span>Lessons ({lessonsList.length})</span>
         </button>
+        )}
 
+        {allowedTabs.includes('payments') && (
         <button
           onClick={() => setActiveAdminTab('payments')}
           className={`px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
@@ -464,8 +504,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }`}
         >
           <CreditCard className="w-4 h-4" />
-          <span>Tuition Payments & Ledger ({transactionsList.length})</span>
+          <span>Payments ({transactionsList.length})</span>
         </button>
+        )}
       </div>
 
       {/* VIEW A: STUDENT ROSTERS */}
@@ -825,15 +866,73 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-[#2C3E50] mb-1">Attached PDF Notes</label>
+              <label className="block text-xs font-bold text-[#2C3E50] mb-1">Additional Material Count</label>
               <input
                 type="number"
-                min={1}
+                min={0}
                 value={lessonForm.materialsCount}
                 onChange={(e) => setLessonForm({ ...lessonForm, materialsCount: Number(e.target.value) })}
                 className="w-full px-3.5 py-2 text-sm rounded-xl border border-[#D6ECFA] bg-[#FAFDFE]"
               />
             </div>
+          </div>
+
+          {/* PDF Lesson Attachments */}
+          <div>
+            <label className="block text-xs font-bold text-[#2C3E50] mb-1.5">
+              Attach PDF Lesson Materials
+              <span className="ml-1.5 text-[11px] font-normal text-[#64748B]">(PDF only · multiple allowed)</span>
+            </label>
+
+            {/* Drop zone / file picker */}
+            <label
+              htmlFor="lesson-pdf-upload"
+              className="flex flex-col items-center justify-center w-full px-4 py-5 border-2 border-dashed border-[#BCE0F7] rounded-xl bg-[#F4FAFD] hover:bg-[#EEF7FD] hover:border-[#3498DB] transition-colors cursor-pointer group"
+            >
+              <FileText className="w-7 h-7 text-[#3498DB] mb-2 group-hover:scale-105 transition-transform" />
+              <span className="text-xs font-semibold text-[#3498DB]">Click to browse or drag PDF files here</span>
+              <span className="text-[11px] text-[#94A3B8] mt-0.5">Accepted: .pdf · Max 20 MB per file</span>
+              <input
+                id="lesson-pdf-upload"
+                type="file"
+                accept=".pdf,application/pdf"
+                multiple
+                className="sr-only"
+                onChange={handlePdfSelect}
+              />
+            </label>
+
+            {/* Attached file list */}
+            {lessonPdfFiles.length > 0 && (
+              <ul className="mt-2 space-y-1.5">
+                {lessonPdfFiles.map((file) => (
+                  <li
+                    key={file.name}
+                    className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-white border border-[#D6ECFA] text-xs"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileText className="w-4 h-4 text-[#3498DB] shrink-0" />
+                      <span className="font-medium text-[#2C3E50] truncate">{file.name}</span>
+                      <span className="text-[#94A3B8] shrink-0">
+                        ({(file.size / 1024).toFixed(0)} KB)
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePdf(file.name)}
+                      className="text-[#94A3B8] hover:text-rose-500 shrink-0 cursor-pointer transition-colors"
+                      aria-label={`Remove ${file.name}`}
+                    >
+                      <XCircle className="w-4 h-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {lessonPdfFiles.length === 0 && (
+              <p className="mt-1.5 text-[11px] text-[#94A3B8]">No PDF files attached yet.</p>
+            )}
           </div>
 
           <div>

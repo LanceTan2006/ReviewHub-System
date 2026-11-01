@@ -1,17 +1,60 @@
-export type UserRole = 'student' | 'admin' | 'guest';
+// ── User Roles ────────────────────────────────────────────────
+export type UserRole = 'guest' | 'student' | 'frontdesk' | 'proctor' | 'manager';
 
-export type ActivePage = 
+// ── All navigable pages in the SPA ───────────────────────────
+export type ActivePage =
+  // Public
   | 'landing'
   | 'login'
+
+  // Student pages
   | 'student-dashboard'
+  | 'student-profile'
   | 'student-packages'
-  | 'student-lessons'
   | 'student-enrollment'
   | 'student-payment'
-  | 'ai-reviewer'
+  | 'student-lessons'
   | 'quiz'
-  | 'student-progress'
+  | 'student-mock-exam'
+  | 'ai-reviewer'
   | 'student-certificates'
+  | 'student-announcements'
+
+  // Front Desk / Staff pages
+  | 'frontdesk-dashboard'
+  | 'frontdesk-students'
+  | 'frontdesk-enrollment'
+  | 'frontdesk-payments'
+  | 'frontdesk-schedule'
+  | 'frontdesk-reports'
+  | 'frontdesk-announcements'
+  | 'frontdesk-profile'
+
+  // Proctor pages
+  | 'proctor-dashboard'
+  | 'proctor-lessons'
+  | 'proctor-quiz'
+  | 'proctor-mock-exam'
+  | 'proctor-performance'
+  | 'proctor-announcements'
+  | 'proctor-profile'
+
+  // Manager pages
+  | 'manager-dashboard'
+  | 'manager-users'
+  | 'manager-students'
+  | 'manager-packages'
+  | 'manager-enrollment'
+  | 'manager-payments'
+  | 'manager-schedule'
+  | 'manager-reports'
+  | 'manager-analytics'
+  | 'manager-settings'
+  | 'manager-backup'
+  | 'manager-announcements'
+  | 'manager-profile'
+
+  // Legacy admin pages (kept for backward-compat with existing pages)
   | 'admin-dashboard'
   | 'admin-students'
   | 'admin-enrollment'
@@ -20,8 +63,13 @@ export type ActivePage =
   | 'admin-lessons'
   | 'admin-schedule'
   | 'admin-reports'
-  | 'admin-settings';
+  | 'admin-settings'
 
+  // Shared
+  | 'student-progress'
+  | 'student-packages-view';
+
+// ── Domain interfaces ─────────────────────────────────────────
 export interface StudentProfile {
   id: string;
   name: string;
@@ -122,4 +170,15 @@ export interface EnrolledStudentRecord {
   paymentStatus: 'Paid' | 'Pending' | 'Overdue';
   amount: string;
   academicProgress: number;
+}
+
+// ── User Management (Manager only) ───────────────────────────
+export interface UserManagementRecord {
+  id: string;
+  name: string;
+  email: string;
+  roles: UserRole[];
+  status: 'Active' | 'Suspended';
+  lastLogin: string;
+  createdAt: string;
 }

@@ -202,12 +202,19 @@
    Animated Sections — fade-in on scroll
    ---------------------------------------------------------------- */
 .rh-reveal {
-  opacity: 0;
-  transform: translateY(24px);
+  /* Default: visible — hero is never hidden */
+  opacity: 1;
+  transform: translateY(0);
   transition: opacity 0.6s ease, transform 0.6s ease;
 }
 
-.rh-reveal.rh-visible {
+/* Only non-hero sections animate in */
+.rh-reveal.rh-animate-on-scroll {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.rh-reveal.rh-animate-on-scroll.rh-visible {
   opacity: 1;
   transform: translateY(0);
 }
@@ -235,7 +242,8 @@
   font-weight: 700;
   color: var(--color-primary-dark);
   letter-spacing: 0.01em;
-  white-space: nowrap;
+  white-space: normal;       /* allow wrapping on small screens */
+  max-width: 100%;
 }
 
 .rh-hero-gradient {
@@ -399,12 +407,8 @@
   touch-action: manipulation;
   cursor: pointer;
   user-select: none;
-  min-height: 44px;     /* WCAG touch target */
-  min-width: 44px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+  /* 44px min touch target per WCAG — applied via padding, NOT min-width/min-height
+     so it doesn't force layout dimensions on text links and nav items */
 }
 
 .rh-touch-active {
@@ -490,23 +494,13 @@
 .rh-footer-link:hover { color: var(--color-primary); }
 
 /* ----------------------------------------------------------------
-   jQuery Mobile Override Resets
-   (Prevent jQM styles from clashing with Tailwind/React UI)
+   Mobile-friendly touch utilities
+   (jQuery Mobile coexistence — data-role="none" on body handles
+   auto-enhancement, these rules catch any remaining jQM resets)
    ---------------------------------------------------------------- */
-
-/* Strip jQM default page background so React controls the canvas */
-.ui-page { background: transparent !important; }
-.ui-content { padding: 0 !important; }
-
-/* Reset jQM button styles so our custom buttons look correct */
-.ui-btn {
-  margin: 0 !important;
-  text-shadow: none !important;
-  font-family: var(--font-sans) !important;
-}
-
-/* Allow our modals to stack above jQM overlays */
-.ui-overlay-shadow { z-index: 1000; }
+.ui-page    { background: transparent !important; }
+.ui-content { padding: 0 !important; margin: 0 !important; }
+.ui-btn     { text-shadow: none !important; font-family: var(--font-sans) !important; margin: 0 !important; }
 
 /* ----------------------------------------------------------------
    Responsive — Mobile-First Breakpoints
@@ -676,6 +670,6 @@
    Utility: visually organize section spacing
    ---------------------------------------------------------------- */
 .rh-section-spacing {
-  padding-top: clamp(3rem, 6vw, 5rem);
-  padding-bottom: clamp(3rem, 6vw, 5rem);
+  padding-top: clamp(2rem, 5vw, 4.5rem);
+  padding-bottom: clamp(2rem, 5vw, 4.5rem);
 }

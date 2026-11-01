@@ -2,85 +2,123 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <!-- Responsive viewport for all devices -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
-    <!-- Primary SEO Meta -->
+    <!-- ═══════════════════════════════════════════════
+         PRIMARY META
+    ═══════════════════════════════════════════════ -->
     <title>ReviewHub - Meliora Learning Hub | AI-Powered Exam Preparation</title>
-    <meta name="description" content="ReviewHub by Meliora Learning Hub — AI-powered exam preparation and learning management platform for PRC licensure, college entrance exams, civil service, IELTS, and working students." />
+    <meta name="description" content="ReviewHub by Meliora Learning Hub — AI-powered exam preparation for PRC licensure, college entrance, civil service, IELTS, and working students." />
     <meta name="keywords" content="review center, board exam, PRC licensure, college entrance, IELTS, civil service, AI reviewer, Philippines" />
     <meta name="author" content="Meliora Learning Hub" />
     <meta name="robots" content="index, follow" />
 
-    <!-- Open Graph / Social Meta -->
+    <!-- Open Graph -->
     <meta property="og:title" content="ReviewHub - Meliora Learning Hub | AI-Powered Exam Preparation" />
-    <meta property="og:description" content="AI-powered exam preparation and learning management platform for college students, review centers, and working students in the Philippines." />
+    <meta property="og:description" content="AI-powered exam preparation platform for college students, review centers, and working students in the Philippines." />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="ReviewHub — Meliora Learning Hub" />
     <meta property="og:locale" content="en_PH" />
+
+    <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="ReviewHub — AI-Powered Exam Preparation" />
-    <meta name="twitter:description" content="Prepare Smarter. Learn Better. Achieve More. Join ReviewHub by Meliora Learning Hub." />
+    <meta name="twitter:description" content="Prepare Smarter. Learn Better. Achieve More." />
 
-    <!-- Theme Color for mobile browsers -->
+    <!-- Theme -->
     <meta name="theme-color" content="#3498DB" />
     <meta name="msapplication-TileColor" content="#3498DB" />
 
-    <!-- Canonical -->
-    <link rel="canonical" href="https://reviewhub.meliorahub.edu.ph/" />
+    <link rel="canonical" href="https://LanceTan2006.github.io/ReviewHub-System/" />
 
-    <!-- Google Fonts: Plus Jakarta Sans + JetBrains Mono -->
+    <!-- ═══════════════════════════════════════════════
+         FONTS
+    ═══════════════════════════════════════════════ -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
-    <!-- jQuery (CDN — loaded before the app for DOM manipulation scripts) -->
+    <!-- Bootstrap Icons 1.11 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+
+    <!-- ═══════════════════════════════════════════════
+         JQUERY — must load before jQuery Mobile
+    ═══════════════════════════════════════════════ -->
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"
             integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo="
             crossorigin="anonymous"></script>
 
-    <!-- jQuery Mobile CSS -->
+    <!-- ═══════════════════════════════════════════════
+         JQUERY MOBILE CONFIG — MUST be before jQM JS loads
+         Disables all auto-enhancement so React keeps full DOM control.
+         data-role="none" on body + root div handles the rest.
+    ═══════════════════════════════════════════════ -->
+    <script>
+      $(document).on("mobileinit", function () {
+        $.mobile.ajaxEnabled          = false;
+        $.mobile.hashListeningEnabled = false;
+        $.mobile.pushStateEnabled     = false;
+        $.mobile.linkBindingEnabled   = false;
+        $.mobile.autoInitializePage   = false;  /* ← key: stops jQM page init */
+        $.mobile.ignoreContentEnabled = true;   /* ← key: skip data-role="none" elements */
+      });
+    </script>
+
+    <!-- ═══════════════════════════════════════════════
+         JQUERY MOBILE CSS — load after config script
+    ═══════════════════════════════════════════════ -->
     <link rel="stylesheet"
           href="https://code.jquery.com/mobile/1.5.0-rc1/jquery.mobile-1.5.0-rc1.min.css" />
 
-    <!-- jQuery Mobile JS (after jQuery) -->
-    <script src="https://code.jquery.com/mobile/1.5.0-rc1/jquery.mobile-1.5.0-rc1.min.js"></script>
+    <!-- Override jQM global resets that break React layout -->
+    <style>
+      /* Stop jQM from touching the body background / padding */
+      body.ui-mobile, .ui-mobile body { background: #F4FAFD !important; padding: 0 !important; }
+      /* Keep the React root visible — jQM hides non-page divs by default */
+      #root { display: block !important; visibility: visible !important; opacity: 1 !important; }
+      /* Strip jQM page chrome from our app shell */
+      .ui-page  { background: transparent !important; }
+      .ui-content { padding: 0 !important; margin: 0 !important; }
+      /* Prevent jQM button resets overriding Tailwind buttons */
+      .ui-btn   { text-shadow: none !important; font-family: inherit !important; margin: 0 !important; }
+    </style>
 
-    <!-- Prevent jQuery Mobile from hijacking React's routing -->
-    <script>
-      // Disable jQuery Mobile's auto-initialization so it doesn't interfere
-      // with the React SPA router. We selectively init only widgets we need.
-      $(document).on("mobileinit", function () {
-        $.mobile.ajaxEnabled = false;
-        $.mobile.hashListeningEnabled = false;
-        $.mobile.pushStateEnabled = false;
-        $.mobile.linkBindingEnabled = false;
-        $.mobile.changePage = function () { return false; };
-      });
-    </script>
+    <!-- ═══════════════════════════════════════════════
+         JQUERY MOBILE JS — after config + CSS
+    ═══════════════════════════════════════════════ -->
+    <script src="https://code.jquery.com/mobile/1.5.0-rc1/jquery.mobile-1.5.0-rc1.min.js"></script>
   </head>
-  <body class="bg-[#F4FAFD] text-[#2C3E50] antialiased">
-    <!-- Accessible skip navigation link -->
+
+  <!--
+    data-role="none" tells jQuery Mobile:
+    "Do NOT auto-enhance anything inside here."
+    This is the official jQM way to coexist with other frameworks.
+  -->
+  <body data-role="none" class="bg-[#F4FAFD] text-[#2C3E50] antialiased">
+
+    <!-- Skip to content (accessibility) -->
     <a href="#main-content"
        class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-[#3498DB] focus:text-white focus:rounded-lg focus:font-semibold focus:shadow-lg">
       Skip to main content
     </a>
 
-    <!-- React SPA root -->
-    <div id="root" role="application" aria-label="ReviewHub Application"></div>
+    <!-- React SPA root — data-role="none" prevents jQM page wrapping -->
+    <div id="root" data-role="none"></div>
 
-    <!-- Module entry point -->
+    <!-- Vite / React entry -->
     <script type="module" src="/src/main.tsx"></script>
 
-    <!-- Global jQuery enhancements (runs after React mounts) -->
+    <!-- ═══════════════════════════════════════════════
+         JQUERY ENHANCEMENTS
+         All DOM-ready scripts for interactivity.
+    ═══════════════════════════════════════════════ -->
     <script>
-      // Wait for DOM ready
       $(function () {
 
-        /* =====================================================
-           1. SMOOTH SCROLL — anchor links & hash navigation
-           ===================================================== */
+        /* ─────────────────────────────────────────────
+           1. SMOOTH SCROLL — native anchor hash links
+        ───────────────────────────────────────────── */
         $(document).on("click", 'a[href^="#"]', function (e) {
           var target = $($(this).attr("href"));
           if (target.length) {
@@ -89,78 +127,36 @@
           }
         });
 
-        /* =====================================================
-           2. ANIMATED STAT COUNTER — fires when stats enter viewport
-           ===================================================== */
-        function animateCounter($el) {
-          var target = parseFloat($el.attr("data-target") || $el.text().replace(/[^0-9.]/g, ""));
-          var suffix = $el.attr("data-suffix") || "";
-          var prefix = $el.attr("data-prefix") || "";
-          var decimals = $el.attr("data-decimals") ? parseInt($el.attr("data-decimals")) : 0;
-          var duration = 1800;
-          var startTime = null;
-
-          function step(timestamp) {
-            if (!startTime) startTime = timestamp;
-            var progress = Math.min((timestamp - startTime) / duration, 1);
-            var eased = 1 - Math.pow(1 - progress, 3); // ease-out-cubic
-            var current = eased * target;
-            $el.text(prefix + current.toFixed(decimals) + suffix);
-            if (progress < 1) requestAnimationFrame(step);
-          }
-          requestAnimationFrame(step);
-        }
-
-        // IntersectionObserver for stat counters (once only)
-        if ("IntersectionObserver" in window) {
-          var counterObserver = new IntersectionObserver(function (entries) {
-            entries.forEach(function (entry) {
-              if (entry.isIntersecting) {
-                animateCounter($(entry.target));
-                counterObserver.unobserve(entry.target);
-              }
-            });
-          }, { threshold: 0.4 });
-
-          $("[data-counter]").each(function () {
-            counterObserver.observe(this);
-          });
-        } else {
-          // Fallback: run immediately
-          $("[data-counter]").each(function () { animateCounter($(this)); });
-        }
-
-        /* =====================================================
-           3. SCROLL-SPY — highlight active nav link
-           ===================================================== */
+        /* ─────────────────────────────────────────────
+           2. SCROLL-SPY — active nav link highlight
+        ───────────────────────────────────────────── */
         var sections = ["features-section", "packages-section", "about-section", "contact-section"];
         $(window).on("scroll.spy", function () {
           var scrollY = $(this).scrollTop() + 100;
           sections.forEach(function (id) {
             var el = document.getElementById(id);
             if (el) {
-              var top = $(el).offset().top;
+              var top    = $(el).offset().top;
               var bottom = top + $(el).outerHeight();
-              var link = $('[data-spy-target="' + id + '"]');
+              var $link  = $('[data-spy-target="' + id + '"]');
               if (scrollY >= top && scrollY < bottom) {
-                link.addClass("rh-nav-active");
+                $link.addClass("rh-nav-active");
               } else {
-                link.removeClass("rh-nav-active");
+                $link.removeClass("rh-nav-active");
               }
             }
           });
         });
 
-        /* =====================================================
-           4. CONTACT FORM — client-side input validation
-           ===================================================== */
+        /* ─────────────────────────────────────────────
+           3. CONTACT FORM — submit validation
+        ───────────────────────────────────────────── */
         $(document).on("submit", "#rh-contact-form", function (e) {
           var valid = true;
           $(this).find("[data-validate]").each(function () {
             var rule = $(this).attr("data-validate");
-            var val = $(this).val().trim();
+            var val  = $(this).val().trim();
             var $err = $(this).siblings(".rh-field-error");
-
             if (rule === "required" && !val) {
               $err.text("This field is required.").show();
               $(this).addClass("rh-input-error");
@@ -181,12 +177,13 @@
           if (!valid) e.preventDefault();
         });
 
-        // Live validation on blur
+        /* ─────────────────────────────────────────────
+           4. CONTACT FORM — live blur validation
+        ───────────────────────────────────────────── */
         $(document).on("blur", "#rh-contact-form [data-validate]", function () {
           var rule = $(this).attr("data-validate");
-          var val = $(this).val().trim();
+          var val  = $(this).val().trim();
           var $err = $(this).siblings(".rh-field-error");
-
           if (rule === "required" && !val) {
             $err.text("This field is required.").show();
             $(this).addClass("rh-input-error");
@@ -199,23 +196,22 @@
           }
         });
 
-        /* =====================================================
-           5. MOBILE TOUCH — add active feedback on touch devices
-           ===================================================== */
+        /* ─────────────────────────────────────────────
+           5. TOUCH FEEDBACK — jQuery Mobile style
+        ───────────────────────────────────────────── */
         $(document).on("touchstart", ".rh-touch-btn", function () {
           $(this).addClass("rh-touch-active");
         }).on("touchend touchcancel", ".rh-touch-btn", function () {
           $(this).removeClass("rh-touch-active");
         });
 
-        /* =====================================================
-           6. NAVBAR — sticky hide/show on scroll (mobile perf)
-           ===================================================== */
+        /* ─────────────────────────────────────────────
+           6. NAVBAR — hide on scroll down (mobile only)
+        ───────────────────────────────────────────── */
         var lastScrollY = 0;
         $(window).on("scroll.navbar", function () {
           var current = $(this).scrollTop();
-          // Only collapse on mobile (below 768px)
-          if ($(window).width() < 768) {
+          if ($(window).width() < 1024) {
             if (current > lastScrollY && current > 120) {
               $(".rh-sticky-navbar").addClass("rh-navbar-hidden");
             } else {
@@ -225,31 +221,9 @@
           lastScrollY = current;
         });
 
-        /* =====================================================
-           7. TESTIMONIAL CAROUSEL — auto-rotate every 5 s
-           ===================================================== */
-        var $slides = $(".rh-testimonial-slide");
-        var currentSlide = 0;
-        if ($slides.length > 1) {
-          $slides.hide().eq(0).show();
-          setInterval(function () {
-            $slides.eq(currentSlide).fadeOut(400, function () {
-              currentSlide = (currentSlide + 1) % $slides.length;
-              $slides.eq(currentSlide).fadeIn(400);
-            });
-          }, 5000);
-        }
-
-        /* =====================================================
-           8. PACKAGE CARDS — flip/highlight on hover (jQuery Mobile taphold)
-           ===================================================== */
-        $(document).on("taphold", ".rh-pkg-card", function () {
-          $(this).toggleClass("rh-pkg-highlighted");
-        });
-
-        /* =====================================================
-           9. BACK-TO-TOP BUTTON — show after 400px scroll
-           ===================================================== */
+        /* ─────────────────────────────────────────────
+           7. BACK-TO-TOP — show/hide + smooth scroll
+        ───────────────────────────────────────────── */
         $(window).on("scroll.btt", function () {
           if ($(this).scrollTop() > 400) {
             $("#rh-back-to-top").fadeIn(300);
@@ -261,12 +235,19 @@
           $("html, body").animate({ scrollTop: 0 }, 500, "swing");
         });
 
-        /* =====================================================
-           10. ACCESSIBILITY — focus trap helper for modals
-           ===================================================== */
-        $(document).on("keydown", ".rh-modal-open", function (e) {
+        /* ─────────────────────────────────────────────
+           8. PACKAGE CARD — jQuery Mobile taphold highlight
+        ───────────────────────────────────────────── */
+        $(document).on("taphold", ".rh-pkg-card", function () {
+          $(this).toggleClass("rh-pkg-highlighted");
+        });
+
+        /* ─────────────────────────────────────────────
+           9. MODAL ESCAPE KEY — accessibility
+        ───────────────────────────────────────────── */
+        $(document).on("keydown", function (e) {
           if (e.key === "Escape") {
-            $(this).closest("[role='dialog']").find("[data-modal-close]").trigger("click");
+            $("[role='dialog']").find("[data-modal-close]").trigger("click");
           }
         });
 
@@ -274,4 +255,3 @@
     </script>
   </body>
 </html>
-

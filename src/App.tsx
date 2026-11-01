@@ -1,65 +1,114 @@
 import React, { useState } from 'react';
-import { ActivePage, UserRole, ReviewPackage, Lesson, PaymentTransaction } from './types';
+import { ActivePage, ReviewPackage, Lesson, PaymentTransaction } from './types';
 import { reviewPackages, sampleLessons, samplePaymentTransactions } from './data/mockData';
-import { Navbar } from './components/Navbar';
-import { Sidebar } from './components/Sidebar';
+import {
+  AuthUser, PAGE_PERMISSIONS, ROLE_HOME,
+  hasPermission, buildAuthUser,
+} from './rbac';
+
+import { Navbar }               from './components/Navbar';
+import { Sidebar }              from './components/Sidebar';
 import { ToastContainer, ToastMessage } from './components/Toast';
-import { LandingPage } from './pages/LandingPage';
-import { LoginPage } from './pages/LoginPage';
-import { StudentDashboard } from './pages/StudentDashboard';
-import { AIReviewerPage } from './pages/AIReviewerPage';
-import { QuizPage } from './pages/QuizPage';
-import { AdminDashboard } from './pages/AdminDashboard';
-import { LessonsPage } from './pages/LessonsPage';
-import { PackagesPage } from './pages/PackagesPage';
-import { ProgressPage } from './pages/ProgressPage';
-import { CertificatesPage } from './pages/CertificatesPage';
-import { StudentEnrollmentPage } from './pages/StudentEnrollmentPage';
-import { Menu, X, Sparkles, LayoutDashboard, Shield, GraduationCap, CreditCard } from 'lucide-react';
+
+import { LandingPage }          from './pages/LandingPage';
+import { LoginPage }            from './pages/LoginPage';
+import { StudentDashboard }     from './pages/StudentDashboard';
+import { AIReviewerPage }       from './pages/AIReviewerPage';
+import { QuizPage }             from './pages/QuizPage';
+import { AdminDashboard }       from './pages/AdminDashboard';
+import { LessonsPage }          from './pages/LessonsPage';
+import { PackagesPage }         from './pages/PackagesPage';
+import { ProgressPage }         from './pages/ProgressPage';
+import { CertificatesPage }     from './pages/CertificatesPage';
+import { StudentEnrollmentPage }from './pages/StudentEnrollmentPage';
+import { UserManagementPage }   from './pages/UserManagementPage';
+import { PortalPage }           from './pages/PortalPage';
+
+import { Menu, X } from 'lucide-react';
+import logoImg from './assets/images/reviewhub_logo.png';
+
+// ── Role colour / icon map for the portal header badge ─────────
+const ROLE_BADGE: Record<string, { label: string; cls: string; icon: string }> = {
+  student:   { label: 'Student Portal',    cls: 'text-[#2980B9] bg-blue-50 border-blue-200',     icon: 'bi-mortarboard' },
+  frontdesk: { label: 'Front Desk Portal', cls: 'text-emerald-700 bg-emerald-50 border-emerald-200', icon: 'bi-person-badge' },
+  proctor:   { label: 'Proctor Portal',    cls: 'text-amber-700 bg-amber-50 border-amber-200',   icon: 'bi-journal-check' },
+  manager:   { label: 'Manager Portal',    cls: 'text-purple-700 bg-purple-50 border-purple-200', icon: 'bi-shield-fill-check' },
+  guest:     { label: 'Guest',             cls: 'text-[#64748B] bg-gray-50 border-gray-200',     icon: 'bi-person' },
+};
 
 export default function App() {
-  const [currentPage, setCurrentPage] = useState<ActivePage>('landing');
-  const [userRole, setUserRole] = useState<UserRole>('student');
-  const [packages, setPackages] = useState<ReviewPackage[]>(reviewPackages);
-  const [lessons, setLessons] = useState<Lesson[]>(sampleLessons);
-  const [transactions, setTransactions] = useState<PaymentTransaction[]>(samplePaymentTransactions);
-  const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [currentPage, setCurrentPage]   = useState<ActivePage>('landing');
+  const [authUser,    setAuthUser]       = useState<AuthUser | null>(null);
+  const [packages,    setPackages]       = useState<ReviewPackage[]>(reviewPackages);
+  const [lessons,     setLessons]        = useState<Lesson[]>(sampleLessons);
+  const [transactions,setTransactions]   = useState<PaymentTransaction[]>(samplePaymentTransactions);
+  const [toasts,      setToasts]         = useState<ToastMessage[]>([]);
+  const [mobileSidebar,setMobileSidebar] = useState(false);
 
-  const handleAddPackage = (newPkg: ReviewPackage) => {
-    setPackages((prev) => [newPkg, ...prev]);
+  // ── Toast ───────────────────────────────────────────────────
+  const showToast = (title: string, desc?: string, type: 'success' | 'error' | 'info' = 'info') => {
+    const id  = `toast-${Date.now()}`;
+    const msg: ToastMessage = { id, title, description: desc, type };
+    setToasts((prev) => [...prev, msg]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4500);
   };
 
-  const handleUpdatePackage = (updated: ReviewPackage) => {
-    setPackages((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+  const handleDismissToast = (id: string) => setToasts((prev) => prev.filter((t) => t.id !== id));
+
+  // ── Permission-based navigation guard ───────────────────────
+  const safeNavigate = (page: ActivePage) => {
+    // Public pages — always allowed
+    if (page === 'landing' || page === 'login') { setCurrentPage(page); return; }
+
+    // Must be authenticated
+    if (!authUser) {
+      showToast('Login Required', 'Please sign in to access that page.', 'info');
+      setCurrentPage('login');
+      return;
+    }
+
+    // Check permission for the requested page
+    const requiredPerm = PAGE_PERMISSIONS[page];
+    if (requiredPerm && !hasPermission(authUser, requiredPerm)) {
+      showToast(
+        '403 — Access Denied',
+        `Your roles (${authUser.roles.join(', ')}) do not include the "${requiredPerm}" permission needed for this page.`,
+        'error'
+      );
+      // Redirect to the user's home page instead
+      setCurrentPage(ROLE_HOME[authUser.primaryRole]);
+      return;
+    }
+
+    setCurrentPage(page);
   };
 
-  const handleDeletePackage = (id: string) => {
-    setPackages((prev) => prev.filter((p) => p.id !== id));
+  // ── Login / Logout ──────────────────────────────────────────
+  const handleLoginSuccess = (user: AuthUser) => {
+    setAuthUser(user);
+    const home = ROLE_HOME[user.primaryRole];
+    setCurrentPage(home);
   };
 
-  const handleAddLesson = (newLesson: Lesson) => {
-    setLessons((prev) => [newLesson, ...prev]);
+  const handleLogout = () => {
+    setAuthUser(null);
+    setCurrentPage('landing');
+    showToast('Signed Out', 'You have been returned to the landing page.', 'info');
   };
 
-  const handleVerifyTransaction = (txId: string) => {
-    setTransactions((prev) =>
-      prev.map((t) => (t.id === txId ? { ...t, status: 'Verified' as const } : t))
-    );
-  };
+  // ── Package / Lesson / Transaction handlers ─────────────────
+  const handleAddPackage     = (p: ReviewPackage)   => setPackages((prev) => [p, ...prev]);
+  const handleUpdatePackage  = (p: ReviewPackage)   => setPackages((prev) => prev.map((x) => x.id === p.id ? p : x));
+  const handleDeletePackage  = (id: string)         => setPackages((prev) => prev.filter((x) => x.id !== id));
+  const handleAddLesson      = (l: Lesson)          => setLessons((prev) => [l, ...prev]);
+  const handleVerifyTx       = (id: string)         => setTransactions((prev) => prev.map((t) => t.id === id ? { ...t, status: 'Verified' as const } : t));
 
-  const handleEnrollComplete = (
-    studentName: string,
-    packageTitle: string,
-    amount: string,
-    paymentMethod: string,
-    refNo: string
-  ) => {
-    const newTx: PaymentTransaction = {
+  const handleEnrollComplete = (studentName: string, packageTitle: string, amount: string, paymentMethod: string, refNo: string) => {
+    const tx: PaymentTransaction = {
       id: `tx-${Date.now()}`,
       studentId: `MH-2026-08${Math.floor(60 + Math.random() * 30)}`,
       studentName,
-      studentEmail: 'alyssa.reyes@univ.edu.ph',
+      studentEmail: authUser?.email ?? 'student@univ.edu.ph',
       packageTitle,
       amount,
       paymentMethod: paymentMethod as any,
@@ -67,69 +116,98 @@ export default function App() {
       status: 'Verified',
       date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
     };
-
-    setTransactions((prev) => [newTx, ...prev]);
-    setUserRole('student');
+    setTransactions((prev) => [tx, ...prev]);
   };
 
-  const showToast = (
-    title: string,
-    description?: string,
-    type: 'success' | 'error' | 'info' = 'info'
-  ) => {
-    const id = `toast-${Date.now()}`;
-    const newToast: ToastMessage = { id, title, description, type };
-    setToasts((prev) => [...prev, newToast]);
+  // ── Derived state ────────────────────────────────────────────
+  const isPortalView = currentPage !== 'landing' && currentPage !== 'login';
+  const primaryRole  = authUser?.primaryRole ?? 'guest';
+  const badge        = ROLE_BADGE[primaryRole] ?? ROLE_BADGE.guest;
 
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
+  // ── Page label for breadcrumb ─────────────────────────────
+  const pageLabel = currentPage
+    .replace(/^(student|frontdesk|proctor|manager|admin)-/, '')
+    .replace(/-/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+
+  // ── Portal content router ─────────────────────────────────
+  const renderPortalContent = () => {
+    if (!authUser) return null;
+
+    // ── Student pages with real components ──
+    if (currentPage === 'student-dashboard')  return <StudentDashboard onNavigate={safeNavigate} onShowToast={showToast} />;
+    if (currentPage === 'student-lessons')    return <LessonsPage onNavigate={safeNavigate} onShowToast={showToast} />;
+    if (currentPage === 'student-packages')   return <PackagesPage onNavigate={safeNavigate} onShowToast={showToast} packages={packages} />;
+    if (currentPage === 'student-enrollment' || currentPage === 'student-payment')
+      return <StudentEnrollmentPage onNavigate={safeNavigate} onShowToast={showToast} packages={packages} onEnrollComplete={handleEnrollComplete} />;
+    if (currentPage === 'ai-reviewer')        return <AIReviewerPage onNavigate={safeNavigate} onShowToast={showToast} />;
+    if (currentPage === 'quiz')               return <QuizPage onNavigate={safeNavigate} onShowToast={showToast} mode="practice" />;
+    if (currentPage === 'student-mock-exam')  return <QuizPage onNavigate={safeNavigate} onShowToast={showToast} mode="mock" />;
+    if (currentPage === 'student-progress')   return <ProgressPage onNavigate={safeNavigate} onShowToast={showToast} />;
+    if (currentPage === 'student-certificates') return <CertificatesPage onNavigate={safeNavigate} onShowToast={showToast} />;
+
+    // ── Manager — User Management (needs assign_roles) ──
+    if (currentPage === 'manager-users')
+      return <UserManagementPage currentUser={authUser} onShowToast={showToast} />;
+
+    // ── Legacy admin pages → AdminDashboard ──
+    const adminPages: ActivePage[] = [
+      'admin-dashboard','admin-students','admin-enrollment','admin-payments',
+      'admin-packages','admin-lessons','admin-schedule','admin-reports','admin-settings',
+    ];
+    if (adminPages.includes(currentPage))
+      return (
+        <AdminDashboard
+          onNavigate={safeNavigate}
+          onShowToast={showToast}
+          currentPage={currentPage}
+          packages={packages}
+          onAddPackage={handleAddPackage}
+          onUpdatePackage={handleUpdatePackage}
+          onDeletePackage={handleDeletePackage}
+          lessons={lessons}
+          onAddLesson={handleAddLesson}
+          transactions={transactions}
+          onVerifyPaymentTransaction={handleVerifyTx}
+        />
+      );
+
+    // ── All other portal pages → PortalPage (real content per role) ──
+    return (
+      <PortalPage
+        page={currentPage}
+        user={authUser}
+        onNavigate={safeNavigate}
+        onShowToast={showToast}
+        packages={packages}
+        lessons={lessons}
+        transactions={transactions}
+        onAddLesson={handleAddLesson}
+        onAddPackage={handleAddPackage}
+        onUpdatePackage={handleUpdatePackage}
+        onDeletePackage={handleDeletePackage}
+        onVerifyTransaction={handleVerifyTx}
+        onEnrollComplete={handleEnrollComplete}
+      />
+    );
   };
-
-  const handleDismissToast = (id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  };
-
-  const handleLoginSuccess = (role: UserRole) => {
-    setUserRole(role);
-    if (role === 'admin') {
-      setCurrentPage('admin-dashboard');
-    } else {
-      setCurrentPage('student-dashboard');
-    }
-  };
-
-  const handleLogout = () => {
-    setUserRole('guest');
-    setCurrentPage('landing');
-    showToast('Signed Out', 'You have been returned to the public landing page.', 'info');
-  };
-
-  const isPortalView =
-    currentPage !== 'landing' && currentPage !== 'login';
-
-  const isStudentArea =
-    currentPage.startsWith('student') ||
-    currentPage === 'ai-reviewer' ||
-    currentPage === 'quiz';
 
   return (
     <div className="min-h-screen bg-[#F4FAFD] text-[#2C3E50] flex flex-col font-sans">
-      {/* Toast Notifications */}
       <ToastContainer toasts={toasts} onDismiss={handleDismissToast} />
 
-      {/* Public Pages: Landing Page */}
+      {/* ── Public: Landing ── */}
       {currentPage === 'landing' && (
         <>
           <Navbar
             currentPage={currentPage}
-            onNavigate={(page) => setCurrentPage(page)}
-            userRole={userRole}
-            onRoleChange={setUserRole}
+            onNavigate={safeNavigate}
+            userRole={primaryRole as any}
+            onRoleChange={() => {}}
             onOpenLogin={() => setCurrentPage('login')}
           />
           <LandingPage
-            onNavigate={(page) => setCurrentPage(page)}
+            onNavigate={safeNavigate}
             onOpenLogin={() => setCurrentPage('login')}
             onShowToast={showToast}
             packages={packages}
@@ -137,7 +215,7 @@ export default function App() {
         </>
       )}
 
-      {/* Login Page */}
+      {/* ── Public: Login ── */}
       {currentPage === 'login' && (
         <LoginPage
           onLoginSuccess={handleLoginSuccess}
@@ -146,35 +224,36 @@ export default function App() {
         />
       )}
 
-      {/* Portal Views (Student & Admin) with Unified Sidebar and Responsive Drawer */}
+      {/* ── Portal: authenticated pages ── */}
       {isPortalView && (
         <div className="flex h-screen overflow-hidden">
+
           {/* Desktop Sidebar */}
           <div className="hidden lg:block shrink-0">
             <Sidebar
               currentPage={currentPage}
-              onNavigate={(page) => {
-                setCurrentPage(page);
-                setMobileSidebarOpen(false);
-              }}
-              role={isStudentArea ? 'student' : 'admin'}
+              onNavigate={safeNavigate}
+              role={primaryRole}
               onLogout={handleLogout}
+              userName={authUser?.name}
+              userEmail={authUser?.email}
             />
           </div>
 
-          {/* Mobile Sidebar Drawer Overlay */}
-          {mobileSidebarOpen && (
+          {/* Mobile sidebar drawer */}
+          {mobileSidebar && (
             <div className="fixed inset-0 z-50 lg:hidden flex">
               <div
-                className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs"
-                onClick={() => setMobileSidebarOpen(false)}
+                className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm"
+                onClick={() => setMobileSidebar(false)}
               />
               <div className="relative z-10 w-72 h-full bg-white shadow-xl flex flex-col">
                 <div className="p-4 border-b border-[#E1EFF7] flex items-center justify-between">
-                  <span className="font-bold text-[#2C3E50]">Menu Navigation</span>
+                  <img src={logoImg} alt="ReviewHub" className="h-7 w-auto object-contain" />
                   <button
-                    onClick={() => setMobileSidebarOpen(false)}
-                    className="p-1.5 text-[#64748B] hover:text-[#2C3E50] rounded-lg"
+                    onClick={() => setMobileSidebar(false)}
+                    className="p-1.5 text-[#64748B] hover:text-[#2C3E50] rounded-lg cursor-pointer"
+                    aria-label="Close sidebar"
                   >
                     <X className="w-5 h-5" />
                   </button>
@@ -182,130 +261,77 @@ export default function App() {
                 <div className="flex-1 overflow-y-auto">
                   <Sidebar
                     currentPage={currentPage}
-                    onNavigate={(page) => {
-                      setCurrentPage(page);
-                      setMobileSidebarOpen(false);
-                    }}
-                    role={isStudentArea ? 'student' : 'admin'}
+                    onNavigate={(p) => { safeNavigate(p); setMobileSidebar(false); }}
+                    role={primaryRole}
                     onLogout={handleLogout}
+                    userName={authUser?.name}
+                    userEmail={authUser?.email}
                   />
                 </div>
               </div>
             </div>
           )}
 
-          {/* Portal Main Content Area */}
+          {/* Main content area */}
           <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
-            {/* Top Workspace App Header */}
-            <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-[#E1EFF7] px-4 sm:px-8 py-3.5 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
+
+            {/* Portal top bar */}
+            <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-[#E1EFF7] px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 min-w-0">
+                {/* Mobile menu toggle */}
                 <button
-                  onClick={() => setMobileSidebarOpen(true)}
+                  onClick={() => setMobileSidebar(true)}
                   className="lg:hidden p-2 text-[#2C3E50] hover:bg-[#F4FAFD] rounded-xl cursor-pointer"
-                  aria-label="Open sidebar"
+                  aria-label="Open navigation menu"
                 >
                   <Menu className="w-5 h-5" />
                 </button>
 
-                <div className="flex items-center gap-2 text-xs text-[#64748B] truncate">
-                  <button
-                    onClick={() => setCurrentPage('landing')}
-                    className="hover:text-[#3498DB] font-medium hidden sm:inline truncate"
-                  >
-                    ReviewHub
-                  </button>
-                  <span className="hidden sm:inline">/</span>
-                  <span className="font-semibold text-[#2C3E50] capitalize truncate">
-                    {currentPage.replace('student-', '').replace('admin-', '').replace('-', ' ')}
-                  </span>
-                </div>
-              </div>
-
-              {/* Quick Jump Switcher Bar */}
-              <div className="flex items-center gap-2">
+                {/* Breadcrumb */}
                 <button
                   onClick={() => setCurrentPage('landing')}
-                  className="text-xs font-semibold text-[#64748B] hover:text-[#3498DB] px-2.5 py-1.5 rounded-lg border border-[#E1EFF7] bg-white transition-colors cursor-pointer hidden sm:flex items-center gap-1.5"
+                  className="hover:opacity-75 transition-opacity hidden sm:block shrink-0"
+                  aria-label="Go to home"
                 >
-                  <GraduationCap className="w-3.5 h-3.5 text-[#3498DB]" />
-                  <span>Landing Page</span>
+                  <img src={logoImg} alt="ReviewHub" className="h-6 w-auto object-contain" />
+                </button>
+                <span className="hidden sm:inline text-[#D6ECFA]">/</span>
+                <span className="text-sm font-semibold text-[#2C3E50] truncate">{pageLabel}</span>
+              </div>
+
+              {/* Right: role badge + permissions count */}
+              <div className="flex items-center gap-2 shrink-0">
+                {/* Home button */}
+                <button
+                  onClick={() => setCurrentPage('landing')}
+                  className="hidden sm:flex items-center gap-1.5 text-xs font-semibold text-[#64748B] hover:text-[#3498DB] px-2.5 py-1.5 rounded-lg border border-[#E1EFF7] bg-white transition-colors cursor-pointer"
+                >
+                  <i className="bi bi-house" aria-hidden="true" />
+                  Home
                 </button>
 
-                <button
-                  onClick={() =>
-                    setCurrentPage(isStudentArea ? 'admin-dashboard' : 'student-dashboard')
-                  }
-                  className="text-xs font-bold text-[#2980B9] bg-[#D6ECFA]/60 hover:bg-[#D6ECFA] px-3 py-1.5 rounded-xl border border-[#BCE0F7] transition-all cursor-pointer flex items-center gap-1.5"
-                >
-                  {isStudentArea ? (
-                    <>
-                      <Shield className="w-3.5 h-3.5 text-[#3498DB]" />
-                      <span>Switch to Admin Staff</span>
-                    </>
-                  ) : (
-                    <>
-                      <LayoutDashboard className="w-3.5 h-3.5 text-[#3498DB]" />
-                      <span>Switch to Student Space</span>
-                    </>
-                  )}
-                </button>
+                {/* Role badge */}
+                <div className={`text-xs font-bold px-3 py-1.5 rounded-xl border flex items-center gap-1.5 ${badge.cls}`}>
+                  <i className={`${badge.icon} text-xs`} aria-hidden="true" />
+                  <span className="hidden sm:inline">{badge.label}</span>
+                </div>
+
+                {/* Permission count (tooltip-style info) */}
+                {authUser && (
+                  <div
+                    className="text-[11px] font-mono font-bold px-2 py-1 rounded-lg bg-[#F4FAFD] border border-[#E1EFF7] text-[#64748B] hidden md:block"
+                    title={`Permissions: ${[...authUser.effectivePermissions].join(', ')}`}
+                  >
+                    <i className="bi bi-key mr-1" aria-hidden="true" />
+                    {authUser.effectivePermissions.size} perms
+                  </div>
+                )}
               </div>
             </header>
 
-            {/* Dynamic View Router */}
-            <main className="flex-1 p-4 sm:p-6 lg:p-8">
-              {currentPage === 'student-dashboard' && (
-                <StudentDashboard onNavigate={setCurrentPage} onShowToast={showToast} />
-              )}
-              {currentPage === 'student-lessons' && (
-                <LessonsPage onNavigate={setCurrentPage} onShowToast={showToast} />
-              )}
-              {currentPage === 'student-packages' && (
-                <PackagesPage onNavigate={setCurrentPage} onShowToast={showToast} packages={packages} />
-              )}
-              {(currentPage === 'student-enrollment' || currentPage === 'student-payment') && (
-                <StudentEnrollmentPage
-                  onNavigate={setCurrentPage}
-                  onShowToast={showToast}
-                  packages={packages}
-                  onEnrollComplete={handleEnrollComplete}
-                />
-              )}
-              {currentPage === 'ai-reviewer' && (
-                <AIReviewerPage onNavigate={setCurrentPage} onShowToast={showToast} />
-              )}
-              {currentPage === 'quiz' && (
-                <QuizPage onNavigate={setCurrentPage} onShowToast={showToast} />
-              )}
-              {currentPage === 'student-progress' && (
-                <ProgressPage onNavigate={setCurrentPage} onShowToast={showToast} />
-              )}
-              {currentPage === 'student-certificates' && (
-                <CertificatesPage onNavigate={setCurrentPage} onShowToast={showToast} />
-              )}
-              {(currentPage === 'admin-dashboard' ||
-                currentPage === 'admin-students' ||
-                currentPage === 'admin-enrollment' ||
-                currentPage === 'admin-payments' ||
-                currentPage === 'admin-packages' ||
-                currentPage === 'admin-lessons' ||
-                currentPage === 'admin-schedule' ||
-                currentPage === 'admin-reports' ||
-                currentPage === 'admin-settings') && (
-                <AdminDashboard
-                  onNavigate={setCurrentPage}
-                  onShowToast={showToast}
-                  currentPage={currentPage}
-                  packages={packages}
-                  onAddPackage={handleAddPackage}
-                  onUpdatePackage={handleUpdatePackage}
-                  onDeletePackage={handleDeletePackage}
-                  lessons={lessons}
-                  onAddLesson={handleAddLesson}
-                  transactions={transactions}
-                  onVerifyPaymentTransaction={handleVerifyTransaction}
-                />
-              )}
+            {/* Page content */}
+            <main className="flex-1 p-4 sm:p-6 lg:p-8" id="main-content">
+              {renderPortalContent()}
             </main>
           </div>
         </div>

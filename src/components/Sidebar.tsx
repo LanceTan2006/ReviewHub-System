@@ -1,162 +1,215 @@
 import React from 'react';
 import { ActivePage, UserRole } from '../types';
-import {
-  LayoutDashboard,
-  Package,
-  BookOpen,
-  Sparkles,
-  HelpCircle,
-  FileCheck2,
-  TrendingUp,
-  Award,
-  User,
-  LogOut,
-  Users,
-  CreditCard,
-  Calendar,
-  BarChart3,
-  Settings,
-  GraduationCap,
-  ChevronRight,
-  ShieldAlert
-} from 'lucide-react';
+import logoImg from '../assets/images/reviewhub_logo.png';
 
 interface SidebarProps {
   currentPage: ActivePage;
   onNavigate: (page: ActivePage) => void;
   role: UserRole;
   onLogout: () => void;
-  studentName?: string;
-  avatarUrl?: string;
+  userName?: string;
+  userEmail?: string;
 }
 
+// ── Nav item definition ────────────────────────────────────────
+interface NavItem {
+  id: ActivePage;
+  label: string;
+  icon: string;        // Bootstrap Icon class e.g. "bi-speedometer2"
+  section?: string;    // Optional group heading
+}
+
+// ── Role metadata ──────────────────────────────────────────────
+const ROLE_META: Record<UserRole, { label: string; color: string; badge: string; bgClass: string }> = {
+  guest:     { label: 'Guest',         color: '#64748B', badge: 'bg-gray-100 text-gray-600 border-gray-200',     bgClass: 'bg-gray-50' },
+  student:   { label: 'Student',       color: '#3498DB', badge: 'bg-blue-50 text-blue-700 border-blue-200',      bgClass: 'bg-blue-50' },
+  frontdesk: { label: 'Front Desk',    color: '#10B981', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200', bgClass: 'bg-emerald-50' },
+  proctor:   { label: 'Proctor',       color: '#F59E0B', badge: 'bg-amber-50 text-amber-700 border-amber-200',   bgClass: 'bg-amber-50' },
+  manager:   { label: 'Manager',       color: '#7C3AED', badge: 'bg-purple-50 text-purple-700 border-purple-200', bgClass: 'bg-purple-50' },
+};
+
+// ── Nav definitions per role ───────────────────────────────────
+const NAV_ITEMS: Record<UserRole, NavItem[]> = {
+  guest: [],
+
+  student: [
+    { id: 'student-dashboard',    label: 'Dashboard',         icon: 'bi-speedometer2',      section: 'Main' },
+    { id: 'student-profile',      label: 'My Profile',        icon: 'bi-person-circle' },
+    { id: 'student-packages',     label: 'Review Packages',   icon: 'bi-collection',        section: 'Learning' },
+    { id: 'student-enrollment',   label: 'My Enrollment',     icon: 'bi-clipboard-check' },
+    { id: 'student-lessons',      label: 'Lessons',           icon: 'bi-play-circle' },
+    { id: 'quiz',                 label: 'Practice Quiz',     icon: 'bi-question-circle' },
+    { id: 'student-mock-exam',    label: 'Mock Examination',  icon: 'bi-file-earmark-text' },
+    { id: 'ai-reviewer',          label: 'AI Reviewer',       icon: 'bi-stars' },
+    { id: 'student-certificates', label: 'Certificates',      icon: 'bi-award',             section: 'Records' },
+    { id: 'student-announcements',label: 'Announcements',     icon: 'bi-megaphone' },
+  ],
+
+  frontdesk: [
+    { id: 'frontdesk-dashboard',   label: 'Dashboard',            icon: 'bi-speedometer2',   section: 'Main' },
+    { id: 'frontdesk-students',    label: 'Student Management',   icon: 'bi-people',         section: 'Operations' },
+    { id: 'frontdesk-enrollment',  label: 'Enrollment Management',icon: 'bi-clipboard-plus' },
+    { id: 'frontdesk-payments',    label: 'Payment Management',   icon: 'bi-cash-stack' },
+    { id: 'frontdesk-schedule',    label: 'Schedule Management',  icon: 'bi-calendar3' },
+    { id: 'frontdesk-reports',     label: 'Reports',              icon: 'bi-bar-chart-line',  section: 'Reports' },
+    { id: 'frontdesk-announcements',label: 'Announcements',       icon: 'bi-megaphone' },
+    { id: 'frontdesk-profile',     label: 'My Profile',           icon: 'bi-person-circle',   section: 'Account' },
+  ],
+
+  proctor: [
+    { id: 'proctor-dashboard',     label: 'Dashboard',              icon: 'bi-speedometer2',        section: 'Main' },
+    { id: 'proctor-lessons',       label: 'Lesson Management',      icon: 'bi-journal-bookmark',    section: 'Academic' },
+    { id: 'proctor-quiz',          label: 'Quiz Management',        icon: 'bi-patch-question' },
+    { id: 'proctor-mock-exam',     label: 'Mock Exam Management',   icon: 'bi-file-earmark-ruled' },
+    { id: 'proctor-performance',   label: 'Student Performance',    icon: 'bi-graph-up-arrow' },
+    { id: 'proctor-announcements', label: 'Announcements',          icon: 'bi-megaphone',           section: 'Communication' },
+    { id: 'proctor-profile',       label: 'My Profile',             icon: 'bi-person-circle',       section: 'Account' },
+  ],
+
+  manager: [
+    { id: 'manager-dashboard',     label: 'Dashboard',           icon: 'bi-speedometer2',      section: 'Main' },
+    { id: 'manager-users',         label: 'User Management',     icon: 'bi-people-fill',       section: 'Administration' },
+    { id: 'manager-students',      label: 'Student Management',  icon: 'bi-mortarboard' },
+    { id: 'manager-packages',      label: 'Review Packages',     icon: 'bi-collection-fill' },
+    { id: 'manager-enrollment',    label: 'Enrollment Monitoring',icon: 'bi-clipboard-data' },
+    { id: 'manager-payments',      label: 'Payment Monitoring',  icon: 'bi-cash-coin' },
+    { id: 'manager-schedule',      label: 'Schedule Monitoring', icon: 'bi-calendar-week' },
+    { id: 'manager-reports',       label: 'Reports',             icon: 'bi-file-earmark-bar-graph', section: 'Analytics' },
+    { id: 'manager-analytics',     label: 'Analytics',           icon: 'bi-graph-up' },
+    { id: 'manager-settings',      label: 'Settings',            icon: 'bi-gear-fill',         section: 'System' },
+    { id: 'manager-backup',        label: 'Backup & Restore',    icon: 'bi-cloud-arrow-up' },
+    { id: 'manager-announcements', label: 'Announcements',       icon: 'bi-megaphone',         section: 'Communication' },
+    { id: 'manager-profile',       label: 'My Profile',          icon: 'bi-person-circle',     section: 'Account' },
+  ],
+};
+
+// ── Sidebar Component ──────────────────────────────────────────
 export const Sidebar: React.FC<SidebarProps> = ({
   currentPage,
   onNavigate,
   role,
   onLogout,
-  studentName = 'Alyssa Reyes',
-  avatarUrl = '/src/assets/images/avatar_student_meliora_1793090026459.jpg',
+  userName,
+  userEmail,
 }) => {
-  const isStudent = role === 'student';
+  const meta = ROLE_META[role] || ROLE_META.guest;
+  const navItems = NAV_ITEMS[role] || [];
 
-  const studentNavItems = [
-    { id: 'student-dashboard' as ActivePage, label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
-    { id: 'student-packages' as ActivePage, label: 'My Review Package', icon: <Package className="w-5 h-5" /> },
-    { id: 'student-lessons' as ActivePage, label: 'Lessons', icon: <BookOpen className="w-5 h-5" /> },
-    { id: 'ai-reviewer' as ActivePage, label: 'AI Reviewer', icon: <Sparkles className="w-5 h-5 text-[#3498DB]" /> },
-    { id: 'quiz' as ActivePage, label: 'Quiz & IELTS Band Drill', icon: <HelpCircle className="w-5 h-5" /> },
-    { id: 'student-enrollment' as ActivePage, label: 'Enroll / Pay Tuition', icon: <CreditCard className="w-5 h-5 text-emerald-600" /> },
-    { id: 'student-progress' as ActivePage, label: 'Progress', icon: <TrendingUp className="w-5 h-5" /> },
-    { id: 'student-certificates' as ActivePage, label: 'Certificates', icon: <Award className="w-5 h-5" /> },
-  ];
+  // Derive display name / email based on role
+  const displayName  = userName  || (role === 'student' ? 'Alyssa Reyes' : role === 'frontdesk' ? 'Maria Santos' : role === 'proctor' ? 'Dr. Ramon Delgado' : role === 'manager' ? 'Catherine Lim' : 'User');
+  const displayEmail = userEmail || (role === 'student' ? 'alyssa.reyes@univ.edu.ph' : role === 'frontdesk' ? 'maria.santos@meliorahub.edu.ph' : role === 'proctor' ? 'r.delgado@meliorahub.edu.ph' : 'c.lim@meliorahub.edu.ph');
 
-  const adminNavItems = [
-    { id: 'admin-dashboard' as ActivePage, label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
-    { id: 'admin-students' as ActivePage, label: 'Students', icon: <Users className="w-5 h-5" /> },
-    { id: 'admin-packages' as ActivePage, label: 'Review Packages', icon: <Package className="w-5 h-5" /> },
-    { id: 'admin-lessons' as ActivePage, label: 'Generate Lessons', icon: <BookOpen className="w-5 h-5 text-[#3498DB]" /> },
-    { id: 'admin-payments' as ActivePage, label: 'Payments & Ledger', icon: <CreditCard className="w-5 h-5" /> },
-    { id: 'admin-schedule' as ActivePage, label: 'Schedule', icon: <Calendar className="w-5 h-5" /> },
-    { id: 'admin-reports' as ActivePage, label: 'Reports', icon: <BarChart3 className="w-5 h-5" /> },
-  ];
-
-  const navItems = isStudent ? studentNavItems : adminNavItems;
+  // Group items by section
+  let lastSection = '';
 
   return (
-    <aside className="w-64 bg-[#D6ECFA]/50 border-r border-[#CFE5F5] flex flex-col justify-between shrink-0 h-screen sticky top-0 overflow-y-auto">
-      {/* Top Brand Header */}
-      <div>
-        <div className="p-5 border-b border-[#BFDDF2] flex items-center justify-between">
-          <div
-            onClick={() => onNavigate('landing')}
-            className="flex items-center gap-3 cursor-pointer group"
-          >
-            <div className="w-9 h-9 rounded-xl bg-[#3498DB] text-white flex items-center justify-center shadow-xs">
-              <GraduationCap className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-base font-bold text-[#2C3E50] tracking-tight leading-tight">
-                ReviewHub
-              </div>
-              <div className="text-[10px] text-[#3498DB] font-semibold tracking-wider uppercase">
-                {isStudent ? 'Student Space' : 'Admin Console'}
-              </div>
+    <aside
+      className="w-64 flex flex-col h-screen sticky top-0 overflow-y-auto border-r border-[#E1EFF7]"
+      style={{ background: 'linear-gradient(180deg, #F8FCFF 0%, #EEF7FD 100%)' }}
+      aria-label={`${meta.label} navigation sidebar`}
+    >
+      {/* ── Brand Header ─────────────────────────────── */}
+      <div className="px-5 py-4 border-b border-[#D6ECFA] flex items-center gap-3">
+        <button
+          onClick={() => onNavigate('landing')}
+          className="flex items-center gap-2.5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#3498DB] rounded-lg flex-1 min-w-0"
+          aria-label="Go to landing page"
+          style={{ background: 'none', border: 'none', padding: 0 }}
+        >
+          <img
+            src={logoImg}
+            alt="ReviewHub"
+            className="h-8 w-auto object-contain shrink-0"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          />
+          <div className="min-w-0">
+            <div className="text-[11px] font-bold tracking-widest uppercase leading-none truncate"
+                 style={{ color: meta.color }}>
+              {meta.label} Portal
             </div>
           </div>
-        </div>
-
-        {/* Navigation Links */}
-        <div className="px-3 py-4 space-y-1">
-          <div className="px-3 pb-2 text-[11px] font-semibold tracking-wider text-[#64748B] uppercase">
-            {isStudent ? 'Learning Menu' : 'Staff Operations'}
-          </div>
-          {navItems.map((item, index) => {
-            const isActive = currentPage === item.id;
-            return (
-              <button
-                key={`${item.id}-${index}`}
-                onClick={() => onNavigate(item.id)}
-                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 cursor-pointer ${
-                  isActive
-                    ? 'bg-white text-[#2980B9] shadow-xs font-semibold'
-                    : 'text-[#2C3E50] hover:bg-white/60 hover:text-[#3498DB]'
-                }`}
-              >
-                <div className="flex items-center gap-3 truncate">
-                  <span className={`${isActive ? 'text-[#3498DB]' : 'text-[#64748B]'}`}>
-                    {item.icon}
-                  </span>
-                  <span className="truncate">{item.label}</span>
-                </div>
-                {isActive && <ChevronRight className="w-4 h-4 text-[#3498DB]" />}
-              </button>
-            );
-          })}
-        </div>
+        </button>
       </div>
 
-      {/* Bottom Profile & Role Actions */}
-      <div className="p-4 border-t border-[#BFDDF2] bg-white/40 space-y-3">
-        {/* User Card */}
-        <div className="flex items-center gap-3 p-2 rounded-xl bg-white/70 border border-[#D6ECFA]">
-          <img
-            src={isStudent ? avatarUrl : '/src/assets/images/avatar_student_meliora_1793090026459.jpg'}
-            alt="User profile"
-            className="w-10 h-10 rounded-full object-cover border border-[#5DADE2] shrink-0"
-            referrerPolicy="no-referrer"
-            onError={(e) => {
-              (e.target as HTMLElement).style.display = 'none';
-            }}
-          />
+      {/* ── Navigation ───────────────────────────────── */}
+      <nav className="flex-1 px-3 py-4 overflow-y-auto" aria-label="Sidebar navigation">
+        {navItems.map((item) => {
+          const isActive = currentPage === item.id;
+          const showSection = item.section && item.section !== lastSection;
+          if (item.section) lastSection = item.section;
+
+          return (
+            <React.Fragment key={item.id}>
+              {/* Section heading */}
+              {showSection && (
+                <div className="px-3 pt-4 pb-1.5 text-[10px] font-bold tracking-widest uppercase text-[#94A3B8]">
+                  {item.section}
+                </div>
+              )}
+
+              {/* Nav button */}
+              <button
+                onClick={() => onNavigate(item.id)}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 cursor-pointer mb-0.5 group ${
+                  isActive
+                    ? 'text-white shadow-sm'
+                    : 'text-[#4A6A80] hover:bg-white hover:text-[#2C3E50] hover:shadow-xs'
+                }`}
+                style={isActive ? { backgroundColor: meta.color } : {}}
+                aria-current={isActive ? 'page' : undefined}
+              >
+                {/* Bootstrap Icon */}
+                <i
+                  className={`${item.icon} text-base leading-none shrink-0 transition-colors ${
+                    isActive ? 'text-white' : 'text-[#64748B] group-hover:text-[#2C3E50]'
+                  }`}
+                  aria-hidden="true"
+                />
+                <span className="truncate">{item.label}</span>
+
+                {/* Active indicator chevron */}
+                {isActive && (
+                  <i className="bi bi-chevron-right text-xs ml-auto opacity-75" aria-hidden="true" />
+                )}
+              </button>
+            </React.Fragment>
+          );
+        })}
+      </nav>
+
+      {/* ── User Profile Footer ───────────────────────── */}
+      <div className="p-4 border-t border-[#D6ECFA] bg-white/60">
+        {/* Role badge */}
+        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border mb-3 ${meta.badge}`}>
+          <i className="bi bi-shield-check text-xs" aria-hidden="true" />
+          {meta.label}
+        </div>
+
+        {/* User card */}
+        <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white border border-[#E1EFF7] mb-3">
+          {/* Avatar circle with initials */}
+          <div
+            className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0"
+            style={{ backgroundColor: meta.color }}
+            aria-hidden="true"
+          >
+            {displayName.charAt(0).toUpperCase()}
+          </div>
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-bold text-[#2C3E50] truncate">
-              {isStudent ? studentName : 'Administrator Lim'}
-            </p>
-            <p className="text-[11px] text-[#64748B] truncate">
-              {isStudent ? 'PRC Board Batch Alpha' : 'Operations Lead'}
-            </p>
+            <p className="text-xs font-bold text-[#2C3E50] truncate">{displayName}</p>
+            <p className="text-[10px] text-[#64748B] truncate">{displayEmail}</p>
           </div>
         </div>
 
-        {/* Quick Demo Switcher & Logout */}
-        <div className="flex items-center gap-2 pt-1">
-          <button
-            onClick={() => onNavigate(isStudent ? 'admin-dashboard' : 'student-dashboard')}
-            className="flex-1 text-[11px] font-semibold text-[#3498DB] hover:text-[#2980B9] bg-white py-1.5 px-2 rounded-lg border border-[#D6ECFA] text-center truncate cursor-pointer"
-            title="Switch demo mode"
-          >
-            Switch to {isStudent ? 'Admin' : 'Student'}
-          </button>
-          <button
-            onClick={onLogout}
-            className="p-1.5 text-[#64748B] hover:text-rose-600 hover:bg-white rounded-lg transition-colors cursor-pointer"
-            title="Logout"
-            aria-label="Logout"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
-        </div>
+        {/* Log Out */}
+        <button
+          onClick={onLogout}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 bg-white border border-rose-100 transition-colors cursor-pointer"
+          aria-label="Log out"
+        >
+          <i className="bi bi-box-arrow-right text-sm" aria-hidden="true" />
+          Log Out
+        </button>
       </div>
     </aside>
   );

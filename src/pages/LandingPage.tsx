@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ActivePage, ReviewPackage } from '../types';
 import { reviewPackages } from '../data/mockData';
 import { Button } from '../components/Button';
 import { Card, CardBody } from '../components/Card';
 import { Modal } from '../components/Modal';
+import logoImg from '../assets/images/reviewhub_logo.png';
 import {
   Sparkles,
   CalendarCheck,
@@ -38,26 +39,6 @@ interface LandingPageProps {
 }
 
 // ----------------------------------------------------------------
-// Reusable: Section Reveal Hook (Intersection Observer)
-// ----------------------------------------------------------------
-function useReveal() {
-  const ref = useRef<HTMLElement | null>(null);
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    if (!ref.current) return;
-    const obs = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) { setVisible(true); obs.disconnect(); } },
-      { threshold: 0.12 }
-    );
-    obs.observe(ref.current);
-    return () => obs.disconnect();
-  }, []);
-
-  return { ref, visible };
-}
-
-// ----------------------------------------------------------------
 // Reusable: Animated stat counter
 // ----------------------------------------------------------------
 const AnimatedCounter: React.FC<{
@@ -68,7 +49,7 @@ const AnimatedCounter: React.FC<{
   label: string;
 }> = ({ value, suffix = '', prefix = '', decimals = 0, label }) => {
   const [count, setCount] = useState(0);
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = React.useRef<HTMLDivElement>(null);
   const [started, setStarted] = useState(false);
 
   useEffect(() => {
@@ -130,14 +111,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [isSubmittingContact, setIsSubmittingContact] = useState(false);
   const [activeTestimonial, setActiveTestimonial] = useState(0);
   const [activeFaq, setActiveFaq] = useState<number | null>(null);
-
-  // Section refs for reveal animations
-  const heroReveal    = useReveal();
-  const featReveal    = useReveal();
-  const pkgReveal     = useReveal();
-  const aboutReveal   = useReveal();
-  const faqReveal     = useReveal();
-  const contactReveal = useReveal();
 
   // Auto-rotate testimonials
   useEffect(() => {
@@ -291,8 +264,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           HERO SECTION
           ================================================================ */}
       <section
-        ref={heroReveal.ref as React.RefObject<HTMLElement>}
-        className={`relative overflow-hidden rh-gradient-hero rh-section-spacing rh-reveal ${heroReveal.visible ? 'rh-visible' : ''}`}
+        className="relative overflow-hidden rh-gradient-hero rh-section-spacing"
         aria-labelledby="hero-heading"
       >
         {/* Ambient glow blobs */}
@@ -306,7 +278,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             {/* Left: Content */}
             <div className="lg:col-span-7 space-y-6">
               {/* Badge */}
-              <div className="rh-hero-badge" role="note">
+              <div className="rh-hero-badge w-fit" role="note">
                 <ShieldCheck className="w-4 h-4 text-[#3498DB] shrink-0" aria-hidden="true" />
                 <span>Meliora Learning Hub — Official Review Platform</span>
               </div>
@@ -332,31 +304,29 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <div className="flex flex-wrap items-center gap-3 pt-1 rh-cta-buttons">
                 <Button
                   variant="primary"
-                  size="lg"
-                  icon={<ArrowRight className="w-5 h-5" aria-hidden="true" />}
+                  size="md"
+                  icon={<ArrowRight className="w-4 h-4" aria-hidden="true" />}
                   iconPosition="right"
                   onClick={() => onNavigate('student-enrollment')}
-                  className="rh-touch-btn"
                   aria-label="Enroll now in a review package"
                 >
                   Enroll Now
                 </Button>
                 <Button
-                  variant="secondary"
-                  size="lg"
+                  variant="outline"
+                  size="md"
                   onClick={() => onNavigate('student-dashboard')}
-                  className="rh-touch-btn"
                 >
                   Student Portal
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="lg"
+                <button
                   onClick={() => document.getElementById('packages-section')?.scrollIntoView({ behavior: 'smooth' })}
-                  className="rh-touch-btn text-[#3498DB]"
+                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#64748B] hover:text-[#3498DB] transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#3498DB] rounded px-1 py-2"
+                  aria-label="Explore review packages"
                 >
                   Explore Packages
-                </Button>
+                  <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+                </button>
               </div>
 
               {/* Trust Stats */}
@@ -422,8 +392,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           ================================================================ */}
       <section
         id="features-section"
-        ref={featReveal.ref as React.RefObject<HTMLElement>}
-        className={`rh-section-spacing bg-white border-y border-[#E1EFF7] rh-reveal ${featReveal.visible ? 'rh-visible' : ''}`}
+        className="rh-section-spacing bg-white border-y border-[#E1EFF7]"
         aria-labelledby="features-heading"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -502,8 +471,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           ================================================================ */}
       <section
         id="packages-section"
-        ref={pkgReveal.ref as React.RefObject<HTMLElement>}
-        className={`rh-section-spacing bg-[#F4FAFD] rh-reveal ${pkgReveal.visible ? 'rh-visible' : ''}`}
+        className="rh-section-spacing bg-[#F4FAFD]"
         aria-labelledby="packages-heading"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -613,8 +581,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           ================================================================ */}
       <section
         id="about-section"
-        ref={aboutReveal.ref as React.RefObject<HTMLElement>}
-        className={`rh-section-spacing bg-white border-t border-[#E1EFF7] rh-reveal ${aboutReveal.visible ? 'rh-visible' : ''}`}
+        className="rh-section-spacing bg-white border-t border-[#E1EFF7]"
         aria-labelledby="about-heading"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -761,8 +728,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           ================================================================ */}
       <section
         id="faq-section"
-        ref={faqReveal.ref as React.RefObject<HTMLElement>}
-        className={`rh-section-spacing bg-[#F4FAFD] border-t border-[#E1EFF7] rh-reveal ${faqReveal.visible ? 'rh-visible' : ''}`}
+        className="rh-section-spacing bg-[#F4FAFD] border-t border-[#E1EFF7]"
         aria-labelledby="faq-heading"
       >
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -813,8 +779,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           ================================================================ */}
       <section
         id="contact-section"
-        ref={contactReveal.ref as React.RefObject<HTMLElement>}
-        className={`rh-section-spacing bg-white border-t border-[#E1EFF7] rh-reveal ${contactReveal.visible ? 'rh-visible' : ''}`}
+        className="rh-section-spacing bg-white border-t border-[#E1EFF7]"
         aria-labelledby="contact-heading"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -1042,13 +1007,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             {/* Brand */}
             <div className="space-y-4 sm:col-span-2 md:col-span-1">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#3498DB] to-[#5DADE2] flex items-center justify-center text-white">
-                  <GraduationCap className="w-4.5 h-4.5" aria-hidden="true" />
-                </div>
-                <div>
-                  <div className="text-lg font-extrabold">ReviewHub</div>
-                  <div className="text-[10px] font-semibold tracking-widest text-[#5DADE2] uppercase">Meliora Learning Hub</div>
-                </div>
+                <img
+                  src={logoImg}
+                  alt="ReviewHub logo"
+                  className="h-9 w-auto object-contain brightness-0 invert"
+                />
               </div>
               <p className="text-xs text-[#94A3B8] leading-relaxed">
                 Empowering future board passers, university entrants, and public servants with AI-driven learning tools.

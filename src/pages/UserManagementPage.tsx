@@ -49,7 +49,7 @@ export const UserManagementPage: React.FC<UserManagementPageProps> = ({
   currentUser,
   onShowToast,
 }) => {
-  const canAssignRoles = hasPermission(currentUser, 'assign_roles') || hasPermission(currentUser, 'manage_students');
+  const canAssignRoles = hasPermission(currentUser, 'assign_roles') || hasPermission(currentUser, 'manage_users');
   const canManageUsers = hasPermission(currentUser, 'manage_users') || hasPermission(currentUser, 'manage_students') || canAssignRoles;
   const [users, setUsers] = useState<UserManagementRecord[]>(INITIAL_USERS);
   const [searchQuery, setSearchQuery] = useState('');

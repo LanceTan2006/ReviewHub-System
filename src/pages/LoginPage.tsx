@@ -65,7 +65,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     if (!toRegister) setEmail('');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
 
@@ -81,9 +81,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
     // ── Login ────────────────────────────────────────────────
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      const user = authenticateUser(email, password);
+    try {
+      const user = await authenticateUser(email.trim(), password);
       if (!user) {
         setFormError('Invalid email or password. Please check your credentials and try again.');
         return;
@@ -94,7 +93,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         'success'
       );
       onLoginSuccess(user);
-    }, 450);
+    } catch (error) {
+      console.error('Login failed:', error);
+      setFormError('Unable to connect to the authentication service. Please verify your Supabase configuration.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

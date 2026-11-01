@@ -10,6 +10,7 @@
  */
 
 import { UserRole } from './types';
+import { supabase } from './lib/supabase';
 
 // ─────────────────────────────────────────────────────────────
 // 1. PERMISSION STRINGS (exhaustive list for the whole system)
@@ -298,10 +299,53 @@ export interface MockUserRecord {
 export const MOCK_USERS: MockUserRecord[] = [];
 
 /**
- * Simulate authentication against the mock user DB.
- * Returns an AuthUser on success, null on failure.
+ * Authenticate against Supabase if configured.
+ * Falls back to the local mock DB in demos and local-only scenarios.
  */
-export function authenticateUser(email: string, password: string): AuthUser | null {
+export async function authenticateUser(email: string, password: string): Promise<AuthUser | null> {
+  if (supabase) {
+    const normalizedEmail = email.trim();
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, full_name, email, password_hash')
+      .ilike('email', normalizedEmail)
+      .maybeSingle();
+
+    if (profileError || !profile) {
+      return null;
+    }
+
+    if (String(profile.password_hash) !== password) {
+      return null;
+    }
+
+    const { data: roleRows } = await supabase
+      .from('user_roles')
+      .select('role_id')
+      .eq('profile_id', profile.id);
+
+    const roleIds = (roleRows ?? []).map((row) => row.role_id).filter(Boolean);
+    let roles: UserRole[] = [];
+
+    if (roleIds.length > 0) {
+      const { data: roleData } = await supabase
+        .from('roles')
+        .select('name')
+        .in('id', roleIds);
+
+      roles = (roleData ?? [])
+        .map((row) => row.name)
+        .filter((name): name is UserRole => !!name && ['guest', 'student', 'frontdesk', 'proctor', 'manager', 'admin'].includes(name));
+    }
+
+    if (roles.length === 0) {
+      roles = ['student'];
+    }
+
+    return buildAuthUser(profile.id, profile.full_name, profile.email, roles);
+  }
+
   const record = MOCK_USERS.find(
     (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
   );

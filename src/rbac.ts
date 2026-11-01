@@ -102,7 +102,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'read', 'write', 'delete',
     'view_own_profile', 'edit_own_profile',
     'manage_users',
-    'assign_roles',        // ONLY manager can do this
+    'assign_roles',
     'manage_students',
     'manage_packages',
     'monitor_enrollment',
@@ -113,7 +113,30 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'manage_settings',
     'manage_backup',
     'view_announcements',
-    // Manager also inherits proctor + frontdesk capabilities for oversight
+    'manage_enrollment',
+    'manage_payments',
+    'manage_schedule',
+    'manage_lessons',
+    'manage_quiz',
+    'manage_mock_exam',
+    'view_student_performance',
+  ],
+
+  admin: [
+    'read', 'write', 'delete',
+    'view_own_profile', 'edit_own_profile',
+    'manage_users',
+    'assign_roles',
+    'manage_students',
+    'manage_packages',
+    'monitor_enrollment',
+    'monitor_payments',
+    'monitor_schedule',
+    'view_reports',
+    'view_analytics',
+    'manage_settings',
+    'manage_backup',
+    'view_announcements',
     'manage_enrollment',
     'manage_payments',
     'manage_schedule',
@@ -149,16 +172,23 @@ export function buildAuthUser(
   email: string,
   roles: UserRole[]
 ): AuthUser {
+  const normalizedRoles = normalizeRoles(roles);
   const perms = new Set<Permission>();
-  roles.forEach((r) => {
-    (ROLE_PERMISSIONS[r] ?? []).forEach((p) => perms.add(p));
+
+  normalizedRoles.forEach((role) => {
+    (ROLE_PERMISSIONS[role] ?? []).forEach((permission) => perms.add(permission));
   });
 
-  // Primary role = highest-privilege role in the set
-  const hierarchy: UserRole[] = ['manager', 'proctor', 'frontdesk', 'student', 'guest'];
-  const primaryRole = hierarchy.find((r) => roles.includes(r)) ?? 'guest';
+  const primaryRole = getPrimaryRole(normalizedRoles);
 
-  return { id, name, email, roles, effectivePermissions: perms, primaryRole };
+  return {
+    id,
+    name,
+    email,
+    roles: normalizedRoles,
+    effectivePermissions: perms,
+    primaryRole,
+  };
 }
 
 /**
@@ -263,44 +293,9 @@ export interface MockUserRecord {
   roles: UserRole[];
 }
 
-export const MOCK_USERS: MockUserRecord[] = [
-  {
-    id: 'usr-001',
-    name: 'Alyssa Reyes',
-    email: 'alyssa.reyes@univ.edu.ph',
-    password: 'Student@123',
-    roles: ['student'],
-  },
-  {
-    id: 'usr-002',
-    name: 'Maria Santos',
-    email: 'maria.santos@meliorahub.edu.ph',
-    password: 'FrontDesk@123',
-    roles: ['frontdesk'],
-  },
-  {
-    id: 'usr-003',
-    name: 'Dr. Ramon Delgado',
-    email: 'r.delgado@meliorahub.edu.ph',
-    password: 'Proctor@123',
-    roles: ['proctor'],
-  },
-  {
-    id: 'usr-004',
-    name: 'Catherine Lim',
-    email: 'c.lim@meliorahub.edu.ph',
-    password: 'Manager@123',
-    roles: ['manager'],
-  },
-  {
-    id: 'usr-005',
-    name: 'Joshua Bautista',
-    email: 'j.bautista@meliorahub.edu.ph',
-    password: 'MultiRole@123',
-    // A user with BOTH frontdesk and proctor — their effective permissions are the union
-    roles: ['frontdesk', 'proctor'],
-  },
-];
+// Demo credentials are intentionally removed from the frontend.
+// Real sample credentials remain in the database schema under supabase/schema.sql.
+export const MOCK_USERS: MockUserRecord[] = [];
 
 /**
  * Simulate authentication against the mock user DB.
@@ -314,6 +309,45 @@ export function authenticateUser(email: string, password: string): AuthUser | nu
   return buildAuthUser(record.id, record.name, record.email, record.roles);
 }
 
+export const ROLE_HIERARCHY: UserRole[] = ['admin', 'manager', 'proctor', 'frontdesk', 'student', 'guest'];
+
+export const ROLE_ALIASES: Record<UserRole, UserRole[]> = {
+  guest: ['guest'],
+  student: ['student'],
+  frontdesk: ['frontdesk'],
+  proctor: ['proctor'],
+  manager: ['manager', 'admin'],
+  admin: ['admin', 'manager'],
+};
+
+export function normalizeRoles(roles: UserRole[]): UserRole[] {
+  const normalized = new Set<UserRole>();
+
+  roles.forEach((role) => {
+    const aliases = ROLE_ALIASES[role] ?? [role];
+    aliases.forEach((alias) => normalized.add(alias));
+  });
+
+  return [...normalized].sort(
+    (a, b) => ROLE_HIERARCHY.indexOf(a) - ROLE_HIERARCHY.indexOf(b)
+  );
+}
+
+export function getPrimaryRole(roles: UserRole[]): UserRole {
+  const normalized = normalizeRoles(roles);
+  return ROLE_HIERARCHY.find((role) => normalized.includes(role)) ?? 'guest';
+}
+
+export function canAccessPage(user: AuthUser | null, page: ActivePage): boolean {
+  if (!user) return page === 'landing' || page === 'login';
+  if (page === 'landing' || page === 'login') return true;
+
+  const requiredPermission = PAGE_PERMISSIONS[page];
+  if (!requiredPermission) return true;
+
+  return hasPermission(user, requiredPermission);
+}
+
 // ─────────────────────────────────────────────────────────────
 // 6. HOME PAGE per primary role
 // ─────────────────────────────────────────────────────────────
@@ -323,4 +357,5 @@ export const ROLE_HOME: Record<UserRole, ActivePage> = {
   frontdesk: 'frontdesk-dashboard',
   proctor:   'proctor-dashboard',
   manager:   'manager-dashboard',
+  admin:     'manager-dashboard',
 };

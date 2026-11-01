@@ -1,12 +1,11 @@
 /**
- * LoginPage — Authentication with 4-role selector.
- * No role selection at runtime login (roles come from the user record).
- * Credentials are verified against MOCK_USERS in rbac.ts.
- * On success, onLoginSuccess receives the full AuthUser object.
+ * LoginPage — Authentication.
+ * The app should authenticate against a real backend or Supabase database.
+ * Demo accounts are intentionally removed from the UI and kept in the database schema.
  */
 import React, { useState } from 'react';
 import { ActivePage } from '../types';
-import { AuthUser, authenticateUser, MOCK_USERS } from '../rbac';
+import { AuthUser, authenticateUser } from '../rbac';
 import { Card, CardBody } from '../components/Card';
 import { Button } from '../components/Button';
 import {
@@ -38,15 +37,6 @@ function strengthLabel(n: number): { label: string; color: string } {
   return              { label: 'Very Strong', color: '#10B981' };
 }
 
-// Demo credential rows shown on the login card
-const DEMO_ROWS = [
-  { role: 'Student',    email: 'alyssa.reyes@univ.edu.ph',        password: 'Student@123',   icon: 'bi-mortarboard',         color: '#3498DB' },
-  { role: 'Front Desk', email: 'maria.santos@meliorahub.edu.ph',   password: 'FrontDesk@123', icon: 'bi-person-badge',        color: '#10B981' },
-  { role: 'Proctor',    email: 'r.delgado@meliorahub.edu.ph',      password: 'Proctor@123',   icon: 'bi-journal-check',       color: '#F59E0B' },
-  { role: 'Manager',    email: 'c.lim@meliorahub.edu.ph',          password: 'Manager@123',   icon: 'bi-shield-fill-check',   color: '#7C3AED' },
-  { role: 'Multi-Role', email: 'j.bautista@meliorahub.edu.ph',     password: 'MultiRole@123', icon: 'bi-person-lines-fill',   color: '#EC4899' },
-];
-
 export const LoginPage: React.FC<LoginPageProps> = ({
   onLoginSuccess,
   onNavigate,
@@ -62,22 +52,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   const [showCPw, setShowCPw]       = useState(false);
   const [pwTouched, setPwTouched]   = useState(false);
   const [formError, setFormError]   = useState('');
-  const [showDemo, setShowDemo]     = useState(false);
 
   // Password strength
   const passed   = PW_RULES.filter((r) => r.test(password));
   const strength = strengthLabel(passed.length);
   const allOk    = passed.length === PW_RULES.length;
-
-  // Pre-fill credentials from demo table
-  const fillDemo = (row: typeof DEMO_ROWS[0]) => {
-    setEmail(row.email);
-    setPassword(row.password);
-    setIsRegister(false);
-    setFormError('');
-    setPwTouched(false);
-    setShowDemo(false);
-  };
 
   const handleToggleMode = (toRegister: boolean) => {
     setIsRegister(toRegister);
@@ -106,7 +85,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       setIsLoading(false);
       const user = authenticateUser(email, password);
       if (!user) {
-        setFormError('Invalid email or password. Please check your credentials or use a demo account below.');
+        setFormError('Invalid email or password. Please check your credentials and try again.');
         return;
       }
       onShowToast(
@@ -350,49 +329,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               )}
             </div>
 
-            {/* ── Demo credentials accordion ── */}
-            <div className="mt-5">
-              <button
-                type="button"
-                onClick={() => setShowDemo(!showDemo)}
-                className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-[#F4FAFD] border border-[#E1EFF7] text-xs font-semibold text-[#64748B] hover:text-[#2C3E50] cursor-pointer transition-colors"
-                aria-expanded={showDemo}
-              >
-                <span className="flex items-center gap-1.5">
-                  <i className="bi bi-people-fill text-[#3498DB]" aria-hidden="true" />
-                  Demo Accounts — Click to Auto-Fill
-                </span>
-                <i className={`bi bi-chevron-${showDemo ? 'up' : 'down'} text-[#94A3B8]`} aria-hidden="true" />
-              </button>
-
-              {showDemo && (
-                <div className="mt-2 border border-[#E1EFF7] rounded-xl overflow-hidden">
-                  {DEMO_ROWS.map((row, i) => (
-                    <button
-                      key={row.email}
-                      type="button"
-                      onClick={() => fillDemo(row)}
-                      className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[#F4FAFD] transition-colors cursor-pointer ${
-                        i < DEMO_ROWS.length - 1 ? 'border-b border-[#F0F6FA]' : ''
-                      }`}
-                    >
-                      <div
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm shrink-0"
-                        style={{ backgroundColor: row.color }}
-                        aria-hidden="true"
-                      >
-                        <i className={row.icon} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-xs font-bold text-[#2C3E50]">{row.role}</div>
-                        <div className="text-[11px] text-[#64748B] truncate">{row.email}</div>
-                      </div>
-                      <code className="text-[10px] font-mono text-[#94A3B8] hidden sm:block shrink-0">{row.password}</code>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
 
           </CardBody>
         </Card>

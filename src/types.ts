@@ -1,5 +1,5 @@
 // ── User Roles ────────────────────────────────────────────────
-export type UserRole = 'guest' | 'student' | 'frontdesk' | 'proctor' | 'manager';
+export type UserRole = 'guest' | 'student' | 'frontdesk' | 'proctor' | 'manager' | 'admin';
 
 // ── All navigable pages in the SPA ───────────────────────────
 export type ActivePage =

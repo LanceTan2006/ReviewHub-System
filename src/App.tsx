@@ -33,6 +33,7 @@ const ROLE_BADGE: Record<string, { label: string; cls: string; icon: string }> =
   frontdesk: { label: 'Front Desk Portal', cls: 'text-emerald-700 bg-emerald-50 border-emerald-200', icon: 'bi-person-badge' },
   proctor:   { label: 'Proctor Portal',    cls: 'text-amber-700 bg-amber-50 border-amber-200',   icon: 'bi-journal-check' },
   manager:   { label: 'Manager Portal',    cls: 'text-purple-700 bg-purple-50 border-purple-200', icon: 'bi-shield-fill-check' },
+  admin:     { label: 'Admin Portal',      cls: 'text-red-700 bg-red-50 border-red-200',        icon: 'bi-shield-lock-fill' },
   guest:     { label: 'Guest',             cls: 'text-[#64748B] bg-gray-50 border-gray-200',     icon: 'bi-person' },
 };
 

@@ -1,13 +1,15 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig} from 'vite';
+import { defineConfig } from 'vite';
+
+const isGitHubPages = process.env.GITHUB_ACTIONS === 'true' || process.env.DEPLOY_TARGET === 'github-pages';
 
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
-    // GitHub Pages base path — matches repo name: LanceTan2006/ReviewHub-System
-    base: process.env.NODE_ENV === 'production' ? '/ReviewHub-System/' : '/',
+    // GitHub Pages needs the repo subpath, while Vercel and local previews should use the root path.
+    base: isGitHubPages ? '/ReviewHub-System/' : '/',
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
@@ -15,11 +17,8 @@ export default defineConfig(() => {
     },
     server: {
       port: 3000,
-      open: true, // automatically opens default browser on npm run dev
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modify—file watching is disabled to prevent flickering during agent edits.
+      open: true,
       hmr: process.env.DISABLE_HMR !== 'true',
-      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
   };

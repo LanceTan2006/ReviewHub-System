@@ -1,11 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { ActivePage, ReviewPackage, Lesson, PaymentTransaction } from './types';
-import { reviewPackages, sampleLessons, samplePaymentTransactions } from './data/mockData';
 import { supabase } from './lib/supabase';
-import { loadSiteData } from './lib/siteData';
 import {
   AuthUser, PAGE_PERMISSIONS, ROLE_HOME,
-  buildAuthUser,
   hasPermission,
 } from './rbac';
 
@@ -43,156 +40,18 @@ const ROLE_BADGE: Record<string, { label: string; cls: string; icon: string }> =
 export default function App() {
   const [currentPage, setCurrentPage]   = useState<ActivePage>('landing');
   const [authUser,    setAuthUser]       = useState<AuthUser | null>(null);
-  const [packages,    setPackages]       = useState<ReviewPackage[]>(reviewPackages);
-  const [lessons,     setLessons]        = useState<Lesson[]>(sampleLessons);
-  const [transactions,setTransactions]   = useState<PaymentTransaction[]>(samplePaymentTransactions);
+  const [packages,    setPackages]       = useState<ReviewPackage[]>([]);
+  const [lessons,     setLessons]        = useState<Lesson[]>([]);
+  const [transactions,setTransactions]   = useState<PaymentTransaction[]>([]);
   const [toasts,      setToasts]         = useState<ToastMessage[]>([]);
   const [mobileSidebar,setMobileSidebar] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
-
-    const hydrateSiteData = async () => {
-      const siteData = await loadSiteData();
-      if (!cancelled) {
-        setPackages(siteData.packages);
-        setLessons(siteData.lessons);
-        setTransactions(siteData.transactions.length ? siteData.transactions : samplePaymentTransactions);
-      }
-    };
-
-    hydrateSiteData();
-
-    const restoreSupabaseSession = async () => {
-      if (!supabase) {
-        const savedUser = sessionStorage.getItem('reviewhub-auth-user');
-        if (savedUser) {
-          try {
-            const parsed = JSON.parse(savedUser) as AuthUser;
-            if (parsed?.id && parsed?.email && !cancelled) {
-              setAuthUser(parsed);
-            }
-          } catch {
-            sessionStorage.removeItem('reviewhub-auth-user');
-          }
-        }
-        return;
-      }
-
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (error || !session?.user || cancelled) return;
-
-        const userId = session.user.id;
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('id, full_name, email, is_active')
-          .eq('id', userId)
-          .maybeSingle();
-
-        if (profileError || !profile || profile.is_active === false) {
-          return;
-        }
-
-        const { data: roleRows } = await supabase
-          .from('user_roles')
-          .select('role_id')
-          .eq('profile_id', profile.id);
-
-        const roleIds = (roleRows ?? []).map((row) => row.role_id).filter(Boolean);
-        if (!roleIds.length) return;
-
-        const { data: roleData } = await supabase
-          .from('roles')
-          .select('name')
-          .in('id', roleIds);
-
-        const roles = (roleData ?? [])
-          .map((row) => row.name)
-          .filter((name): name is any => Boolean(name) && ['guest', 'student', 'frontdesk', 'proctor', 'manager', 'admin'].includes(name));
-
-        if (!roles.length) return;
-
-        const hydratedUser = buildAuthUser(profile.id, profile.full_name, profile.email, roles);
-        if (!cancelled) {
-          setAuthUser(hydratedUser);
-        }
-      } catch {
-        // Ignore restore errors and fall back to the saved browser session only.
-      }
-    };
-
-    restoreSupabaseSession();
-
-    const savedUser = sessionStorage.getItem('reviewhub-auth-user');
-    if (savedUser) {
-      try {
-        const parsed = JSON.parse(savedUser) as AuthUser;
-        if (parsed?.id && parsed?.email && !cancelled) {
-          setAuthUser((current) => current ?? parsed);
-        }
-      } catch {
-        sessionStorage.removeItem('reviewhub-auth-user');
-      }
-    }
-
-    if (supabase) {
-      const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-        if (!session?.user) {
-          setAuthUser(null);
-          return;
-        }
-
-        void (async () => {
-          const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('id, full_name, email, is_active')
-            .eq('id', session.user.id)
-            .maybeSingle();
-
-          if (profileError || !profile || profile.is_active === false) {
-            setAuthUser(null);
-            return;
-          }
-
-          const { data: roleRows } = await supabase
-            .from('user_roles')
-            .select('role_id')
-            .eq('profile_id', profile.id);
-
-          const roleIds = (roleRows ?? []).map((row) => row.role_id).filter(Boolean);
-          if (!roleIds.length) {
-            setAuthUser(null);
-            return;
-          }
-
-          const { data: roleData } = await supabase
-            .from('roles')
-            .select('name')
-            .in('id', roleIds);
-
-          const roles = (roleData ?? [])
-            .map((row) => row.name)
-            .filter((name): name is any => Boolean(name) && ['guest', 'student', 'frontdesk', 'proctor', 'manager', 'admin'].includes(name));
-
-          if (!roles.length) {
-            setAuthUser(null);
-            return;
-          }
-
-          setAuthUser(buildAuthUser(profile.id, profile.full_name, profile.email, roles));
-        })();
-      });
-
-      return () => {
-        cancelled = true;
-        authListener.subscription.unsubscribe();
-      };
-    }
-
-    return () => {
-      cancelled = true;
-    };
+    setPackages([]);
+    setLessons([]);
+    setTransactions([]);
+    setAuthUser(null);
+    sessionStorage.removeItem('reviewhub-auth-user');
   }, []);
 
   useEffect(() => {

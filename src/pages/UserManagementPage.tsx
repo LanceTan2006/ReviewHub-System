@@ -218,35 +218,6 @@ export const UserManagementPage: React.FC<UserManagementPageProps> = ({
         return;
       }
 
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: name,
-          },
-        },
-      });
-
-      if (authError || !authData?.user) {
-        throw authError ?? new Error('Supabase Auth did not create the student user.');
-      }
-
-      const { data: newProfile, error: profileError } = await supabase
-        .from('profiles')
-        .upsert([
-          {
-            id: authData.user.id,
-            full_name: name,
-            email,
-            is_active: true,
-          },
-        ], { onConflict: 'id' })
-        .select('id, full_name, email, is_active, created_at')
-        .single();
-
-      if (profileError || !newProfile) throw profileError ?? new Error('Student profile creation failed.');
-
       const { data: studentRole, error: roleLookupError } = await supabase
         .from('roles')
         .select('id')
@@ -256,31 +227,40 @@ export const UserManagementPage: React.FC<UserManagementPageProps> = ({
       if (roleLookupError) throw roleLookupError;
       if (!studentRole) throw new Error('The student role does not exist in the database.');
 
-      const { error: assignError } = await supabase
-        .from('user_roles')
-        .upsert(
-          [{ profile_id: newProfile.id, role_id: studentRole.id }],
-          { onConflict: 'profile_id,role_id' }
-        );
+      const { data: inviteResult, error: inviteError } = await supabase.functions.invoke('admin-create-user', {
+        body: {
+          email,
+          full_name: name,
+          role_ids: [studentRole.id],
+        },
+      });
 
-      if (assignError) throw assignError;
+      if (inviteError) {
+        throw inviteError;
+      }
+
+      const serverUser = (inviteResult as { user?: { id?: string; email?: string; full_name?: string } } | null)?.user ?? null;
+
+      if (!serverUser?.id) {
+        throw new Error('The server did not return a valid invited user payload.');
+      }
 
       setUsers((prev) => [{
-        id: newProfile.id,
-        name: newProfile.full_name,
-        email: newProfile.email,
+        id: serverUser.id,
+        name: serverUser.full_name ?? name,
+        email: serverUser.email ?? email,
         roles: ['student'],
-        status: newProfile.is_active ? 'Active' : 'Suspended',
+        status: 'Active',
         lastLogin: 'Recently',
-        createdAt: new Date(newProfile.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       }, ...prev]);
 
       setNewStudent({ name: '', email: '', password: '', confirmPassword: '' });
       setShowCreateModal(false);
-      onShowToast('Student Account Created', `${name} can now sign in with the student role.`, 'success');
+      onShowToast('Student Invite Sent', `${name} has been invited and assigned the student role.`, 'success');
     } catch (error: any) {
       console.error('Create student failed:', error);
-      onShowToast('Student Creation Failed', error?.message ?? 'Unable to create the student account.', 'error');
+      onShowToast('Student Invitation Failed', error?.message ?? 'Unable to invite the student account through the protected admin flow.', 'error');
     }
   };
 

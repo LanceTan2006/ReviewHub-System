@@ -6,7 +6,7 @@
 import React, { useState } from 'react';
 import { ActivePage } from '../types';
 import { AuthUser } from '../rbac';
-import { loginHybrid, registerHybrid } from '../lib/hybridAuth';
+import { loginGoogleHybrid, loginHybrid, registerHybrid } from '../lib/hybridAuth';
 import { Card, CardBody } from '../components/Card';
 import { Button } from '../components/Button';
 import {
@@ -64,6 +64,25 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     setPassword(''); setConfirmPw('');
     setPwTouched(false); setFormError('');
     if (!toRegister) setEmail('');
+  };
+
+  const handleGoogleLogin = async () => {
+    setFormError('');
+    setIsLoading(true);
+    try {
+      const user = await loginGoogleHybrid();
+      onShowToast(
+        `Welcome, ${user.name}!`,
+        `Signed in as ${user.roles.map((r) => r.charAt(0).toUpperCase() + r.slice(1)).join(' + ')}`,
+        'success'
+      );
+      onLoginSuccess(user);
+    } catch (error: any) {
+      console.error('Google sign-in failed:', error);
+      setFormError(error?.message ?? 'Google sign-in failed. Please check your Firebase Google provider setup.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -334,6 +353,31 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               >
                 {isLoading ? 'Authenticating…' : isRegister ? 'Create Account' : 'Sign In'}
               </Button>
+
+              {!isRegister && (
+                <>
+                  <div className="relative my-3">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-[#D6ECFA]" />
+                    </div>
+                    <div className="relative flex justify-center text-[11px] font-semibold uppercase tracking-[0.12em] text-[#94A3B8]">
+                      <span className="bg-white px-3">Or continue with</span>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="lg"
+                    onClick={handleGoogleLogin}
+                    disabled={isLoading}
+                    className="w-full justify-center"
+                    icon={<span className="text-base font-bold">G</span>}
+                  >
+                    Continue with Google
+                  </Button>
+                </>
+              )}
             </form>
 
             {/* Toggle mode */}

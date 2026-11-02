@@ -3,6 +3,8 @@ import {
   getAuth,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
   signOut,
   onAuthStateChanged,
   type User,
@@ -19,6 +21,8 @@ const firebaseConfig = {
 
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 export async function registerWithEmail(email: string, password: string) {
   const result = await createUserWithEmailAndPassword(auth, email, password);
@@ -27,6 +31,11 @@ export async function registerWithEmail(email: string, password: string) {
 
 export async function loginWithEmail(email: string, password: string) {
   const result = await signInWithEmailAndPassword(auth, email, password);
+  return result.user;
+}
+
+export async function signInWithGoogleProvider() {
+  const result = await signInWithPopup(auth, googleProvider);
   return result.user;
 }
 

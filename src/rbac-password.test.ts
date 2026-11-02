@@ -1,29 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { hashPassword, passwordsMatch, resolveLegacyProfileLogin } from './rbac';
+import { buildAuthUser, canAccessPage } from './rbac';
 
-test('passwordsMatch accepts legacy plain-text values and hashed values', async () => {
-  const plain = 'Admin@123';
-  const hashed = await hashPassword(plain);
+test('canAccessPage fails closed for unknown protected pages', () => {
+  const user = buildAuthUser('u-1', 'Admin User', 'admin@example.com', ['admin']);
 
-  assert.equal(await passwordsMatch(plain, plain), true);
-  assert.equal(await passwordsMatch(plain, hashed), true);
-  assert.equal(await passwordsMatch('wrong-password', hashed), false);
+  assert.equal(canAccessPage(null, 'admin-dashboard'), false);
+  assert.equal(canAccessPage(user, 'landing'), true);
+  assert.equal(canAccessPage(user, 'login'), true);
+  assert.equal(canAccessPage(user, 'student-dashboard'), true);
+  assert.equal(canAccessPage(user, 'unknown-page' as any), false);
 });
 
-test('resolveLegacyProfileLogin accepts seeded profile hashes for premade accounts', async () => {
-  const profile = {
-    id: 'legacy-admin-id',
-    full_name: 'System Admin',
-    email: 'admin@meliorahub.edu.ph',
-    password_hash: await hashPassword('Admin@123'),
-    is_active: true,
-  };
+test('buildAuthUser computes an effective admin permission set', () => {
+  const user = buildAuthUser('u-1', 'Admin User', 'admin@example.com', ['admin']);
 
-  const user = await resolveLegacyProfileLogin(profile, 'Admin@123', ['admin']);
-
-  assert.ok(user);
-  assert.equal(user?.email, 'admin@meliorahub.edu.ph');
-  assert.equal(user?.primaryRole, 'admin');
+  assert.equal(user.primaryRole, 'admin');
+  assert.equal(user.roles.includes('admin'), true);
+  assert.equal(user.effectivePermissions.has('manage_users'), true);
+  assert.equal(user.effectivePermissions.has('assign_roles'), true);
 });

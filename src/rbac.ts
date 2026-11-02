@@ -283,183 +283,77 @@ export const PAGE_PERMISSIONS: Partial<Record<ActivePage, Permission>> = {
 };
 
 // ─────────────────────────────────────────────────────────────
-// 5. MOCK USER DATABASE  (simulates a backend users table)
-//    In a real app this would come from an API.
+// 5. AUTHENTICATION POLICY
+//    Supabase Auth is the only authentication source of truth.
+//    Browser logic must never grant admin access through a hard-coded
+//    credential or a legacy password/hash fallback.
 // ─────────────────────────────────────────────────────────────
-export interface MockUserRecord {
-  id: string;
-  name: string;
-  email: string;
-  password: string;   // plain-text only for demo — never do this in production
-  roles: UserRole[];
-}
-
-// Demo credentials are intentionally removed from the frontend.
-// Real sample credentials remain in the database schema under supabase/schema.sql.
-export const MOCK_USERS: MockUserRecord[] = [];
-
-export async function hashPassword(password: string): Promise<string> {
-  const rawPassword = password.trim();
-  if (!rawPassword) return '';
-
-  const encoded = new TextEncoder().encode(rawPassword);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
-  return Array.from(new Uint8Array(hashBuffer), (value) => value.toString(16).padStart(2, '0')).join('');
-}
-
-export async function passwordsMatch(candidatePassword: string, storedPassword: string | null | undefined): Promise<boolean> {
-  const normalizedCandidate = candidatePassword.trim();
-  const normalizedStored = String(storedPassword ?? '').trim();
-
-  if (!normalizedCandidate || !normalizedStored) {
-    return false;
-  }
-
-  if (normalizedCandidate === normalizedStored) {
-    return true;
-  }
-
-  const hashedCandidate = await hashPassword(normalizedCandidate);
-  return hashedCandidate === normalizedStored;
-}
-
-export async function resolveLegacyProfileLogin(
-  profile: { id: string; full_name: string; email: string; password_hash?: string | null; is_active?: boolean | null },
-  password: string,
-  roleNames: UserRole[] = []
-): Promise<AuthUser | null> {
-  if (!profile || profile.is_active === false) {
-    return null;
-  }
-
-  const storedHash = profile.password_hash ?? null;
-  if (!storedHash) {
-    return null;
-  }
-
-  const passwordMatches = await passwordsMatch(password, storedHash);
-  if (!passwordMatches) {
-    return null;
-  }
-
-  const roles = normalizeRoles(roleNames);
-  if (!roles.length) {
-    return null;
-  }
-
-  return buildAuthUser(profile.id, profile.full_name, profile.email, roles);
-}
 
 /**
- * Authenticate against Supabase if configured.
- * Falls back to the local mock DB in demos and local-only scenarios.
+ * Authenticate against Supabase Auth only.
+ *
+ * Security requirements:
+ * - no hard-coded emergency admin credential
+ * - no email-based profile fallback
+ * - no legacy password_hash or SHA-256 browser-side checking
+ * - profile lookup must happen by auth user id only
  */
 export async function authenticateUser(email: string, password: string): Promise<AuthUser | null> {
   const normalizedEmail = email.trim().toLowerCase();
 
-  if (
-    normalizedEmail === 'admin@meliorahub.edu.ph' &&
-    password === 'Admin@123'
-  ) {
-    return buildAuthUser('emergency-admin', 'System Admin', normalizedEmail, ['admin']);
+  if (!supabase) {
+    return null;
   }
 
-  if (supabase) {
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email: normalizedEmail,
-      password,
-    });
+  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    email: normalizedEmail,
+    password,
+  });
 
-    if (!authError && authData?.user) {
-      const userId = authData.user.id;
-
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, password_hash, is_active')
-        .eq('id', userId)
-        .maybeSingle();
-
-      const fallbackProfile = !profile
-        ? await supabase
-            .from('profiles')
-            .select('id, full_name, email, password_hash, is_active')
-            .ilike('email', normalizedEmail)
-            .maybeSingle()
-        : null;
-
-      const resolvedProfile = profile ?? fallbackProfile?.data ?? null;
-      if (profileError || !resolvedProfile) {
-        return null;
-      }
-
-      if (resolvedProfile.is_active === false) {
-        return null;
-      }
-
-      const { data: roleRows } = await supabase
-        .from('user_roles')
-        .select('role_id')
-        .eq('profile_id', resolvedProfile.id);
-
-      const roleIds = (roleRows ?? []).map((row) => row.role_id).filter(Boolean);
-
-      if (roleIds.length === 0) {
-        return null;
-      }
-
-      const { data: roleData } = await supabase
-        .from('roles')
-        .select('name')
-        .in('id', roleIds);
-
-      const roles = (roleData ?? [])
-        .map((row) => row.name)
-        .filter((name): name is UserRole => !!name && ['guest', 'student', 'frontdesk', 'proctor', 'manager', 'admin'].includes(name));
-
-      if (roles.length === 0) {
-        return null;
-      }
-
-      return buildAuthUser(resolvedProfile.id, resolvedProfile.full_name, resolvedProfile.email, roles);
-    }
-
-    const { data: legacyProfile, error: legacyProfileError } = await supabase
-      .from('profiles')
-      .select('id, full_name, email, password_hash, is_active')
-      .ilike('email', normalizedEmail)
-      .maybeSingle();
-
-    if (legacyProfileError || !legacyProfile) {
-      return null;
-    }
-
-    const { data: legacyRoleRows } = await supabase
-      .from('user_roles')
-      .select('role_id')
-      .eq('profile_id', legacyProfile.id);
-
-    const legacyRoleIds = (legacyRoleRows ?? []).map((row) => row.role_id).filter(Boolean);
-    if (legacyRoleIds.length === 0) {
-      return null;
-    }
-
-    const { data: legacyRoleData } = await supabase
-      .from('roles')
-      .select('name')
-      .in('id', legacyRoleIds);
-
-    const legacyRoles = (legacyRoleData ?? [])
-      .map((row) => row.name)
-      .filter((name): name is UserRole => !!name && ['guest', 'student', 'frontdesk', 'proctor', 'manager', 'admin'].includes(name));
-
-    return resolveLegacyProfileLogin(legacyProfile, password, legacyRoles);
+  if (authError || !authData?.user) {
+    return null;
   }
 
-  const record = MOCK_USERS.find(
-    (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
-  );
-  if (!record) return null;
-  return buildAuthUser(record.id, record.name, record.email, record.roles);
+  const userId = authData.user.id;
+
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('id, full_name, email, is_active')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (profileError || !profile) {
+    return null;
+  }
+
+  if (profile.is_active === false) {
+    return null;
+  }
+
+  const { data: roleRows } = await supabase
+    .from('user_roles')
+    .select('role_id')
+    .eq('profile_id', profile.id);
+
+  const roleIds = (roleRows ?? []).map((row) => row.role_id).filter(Boolean);
+  if (roleIds.length === 0) {
+    return null;
+  }
+
+  const { data: roleData } = await supabase
+    .from('roles')
+    .select('name')
+    .in('id', roleIds);
+
+  const roles = (roleData ?? [])
+    .map((row) => row.name)
+    .filter((name): name is UserRole => !!name && ['guest', 'student', 'frontdesk', 'proctor', 'manager', 'admin'].includes(name));
+
+  if (roles.length === 0) {
+    return null;
+  }
+
+  return buildAuthUser(profile.id, profile.full_name, profile.email, roles);
 }
 
 export const ROLE_HIERARCHY: UserRole[] = ['admin', 'manager', 'proctor', 'frontdesk', 'student', 'guest'];
@@ -492,11 +386,11 @@ export function getPrimaryRole(roles: UserRole[]): UserRole {
 }
 
 export function canAccessPage(user: AuthUser | null, page: ActivePage): boolean {
-  if (!user) return page === 'landing' || page === 'login';
   if (page === 'landing' || page === 'login') return true;
+  if (!user) return false;
 
   const requiredPermission = PAGE_PERMISSIONS[page];
-  if (!requiredPermission) return true;
+  if (!requiredPermission) return false;
 
   return hasPermission(user, requiredPermission);
 }

@@ -25,6 +25,7 @@ import { UserManagementPage }   from './pages/UserManagementPage';
 import { PortalPage }           from './pages/PortalPage';
 
 import { Menu, X } from 'lucide-react';
+import { logoutFromFirebase } from './lib/firebase';
 import logoImg from './assets/images/reviewhub_logo.png';
 
 // ── Role colour / icon map for the portal header badge ─────────
@@ -108,6 +109,12 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    try {
+      await logoutFromFirebase();
+    } catch {
+      // Firebase may already be signed out or not configured.
+    }
+
     if (supabase) {
       await supabase.auth.signOut();
     }

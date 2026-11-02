@@ -5,8 +5,8 @@
  */
 import React, { useState } from 'react';
 import { ActivePage } from '../types';
-import { AuthUser, authenticateUser } from '../rbac';
-import { supabase } from '../lib/supabase';
+import { AuthUser } from '../rbac';
+import { loginHybrid, registerHybrid } from '../lib/hybridAuth';
 import { Card, CardBody } from '../components/Card';
 import { Button } from '../components/Button';
 import {
@@ -71,93 +71,21 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     setFormError('');
 
     if (isRegister) {
-      if (!allOk)              { setFormError('Password does not meet all requirements.'); setPwTouched(true); return; }
-      if (password !== confirmPw) { setFormError('Passwords do not match.'); return; }
-      if (!supabase) {
-        setFormError('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY before registering.');
+      if (!allOk) {
+        setFormError('Password does not meet all requirements.');
+        setPwTouched(true);
+        return;
+      }
+      if (password !== confirmPw) {
+        setFormError('Passwords do not match.');
         return;
       }
 
       try {
         const normalizedEmail = email.trim().toLowerCase();
+        await registerHybrid(normalizedEmail, password, name.trim() || normalizedEmail);
 
-        const { data: authUser, error: authError } = await supabase.auth.signUp({
-          email: normalizedEmail,
-          password,
-          options: {
-            data: {
-              full_name: name.trim() || normalizedEmail,
-            },
-          },
-        });
-
-        if (authError) {
-          throw authError;
-        }
-
-        const authUserId = authUser?.user?.id;
-        if (!authUserId) {
-          throw new Error('Supabase did not create a valid auth user.');
-        }
-
-        const { data: existingProfile, error: profileLookupError } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('email', normalizedEmail)
-          .maybeSingle();
-
-        if (profileLookupError) {
-          throw profileLookupError;
-        }
-
-        if (existingProfile && existingProfile.id !== authUserId) {
-          setFormError('An account with that email already exists.');
-          return;
-        }
-
-        const { data: insertedProfile, error: profileError } = await supabase
-          .from('profiles')
-          .upsert([
-            {
-              id: authUserId,
-              full_name: name.trim() || normalizedEmail,
-              email: normalizedEmail,
-              avatar_url: null,
-              is_active: true,
-            },
-          ], { onConflict: 'id' })
-          .select('id')
-          .single();
-
-        if (profileError || !insertedProfile) {
-          throw profileError ?? new Error('Profile insert failed.');
-        }
-
-        const { data: studentRole, error: roleLookupError } = await supabase
-          .from('roles')
-          .select('id')
-          .eq('name', 'student')
-          .maybeSingle();
-
-        if (roleLookupError) {
-          throw roleLookupError;
-        }
-
-        if (!studentRole) {
-          throw new Error('Student role was not found in the database.');
-        }
-
-        const { error: roleInsertError } = await supabase
-          .from('user_roles')
-          .upsert([
-            { profile_id: insertedProfile.id, role_id: studentRole.id },
-          ], { onConflict: 'profile_id,role_id' });
-
-        if (roleInsertError) {
-          throw roleInsertError;
-        }
-
-        onShowToast('Account Created!', 'Your account was created in Supabase Auth. Please confirm your email if confirmation is enabled, then sign in.', 'success');
+        onShowToast('Account Created!', 'Your Firebase account was created and a matching Supabase profile was linked.', 'success');
         setIsRegister(false);
         setPassword('');
         setConfirmPw('');
@@ -167,28 +95,23 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         return;
       } catch (error: any) {
         console.error('Registration failed:', error);
-        setFormError(error?.message ?? 'Unable to create the account in Supabase. Please try again.');
+        setFormError(error?.message ?? 'Unable to create the account. Please try again.');
         return;
       }
     }
 
-    // ── Login ────────────────────────────────────────────────
     setIsLoading(true);
     try {
-      const user = await authenticateUser(email.trim(), password);
-      if (!user) {
-        setFormError('Invalid email or password, or this account has no role assigned yet. Please contact the admin/front desk to assign access.');
-        return;
-      }
+      const user = await loginHybrid(email.trim(), password);
       onShowToast(
         `Welcome, ${user.name}!`,
         `Signed in as ${user.roles.map((r) => r.charAt(0).toUpperCase() + r.slice(1)).join(' + ')}`,
         'success'
       );
       onLoginSuccess(user);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login failed:', error);
-      setFormError('Unable to connect to the authentication service. Please verify your Supabase configuration.');
+      setFormError(error?.message ?? 'Unable to connect to the authentication service. Please verify your Firebase and Supabase configuration.');
     } finally {
       setIsLoading(false);
     }

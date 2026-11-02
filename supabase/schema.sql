@@ -51,6 +51,7 @@ create table if not exists public.role_permissions (
 
 create table if not exists public.profiles (
   id uuid primary key default gen_random_uuid(),
+  firebase_uid text unique,
   full_name text not null,
   email citext not null unique,
   password_hash text,
@@ -218,9 +219,10 @@ security definer
 set search_path = public
 as $$
 begin
-  insert into public.profiles (id, full_name, email, avatar_url, is_active)
+  insert into public.profiles (id, firebase_uid, full_name, email, avatar_url, is_active)
   values (
     new.id,
+    new.id::text,
     coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
     new.email,
     null,
@@ -230,7 +232,8 @@ begin
   set full_name = coalesce(public.profiles.full_name, excluded.full_name),
       email = excluded.email,
       avatar_url = coalesce(public.profiles.avatar_url, excluded.avatar_url),
-      is_active = coalesce(public.profiles.is_active, true);
+      is_active = coalesce(public.profiles.is_active, true),
+      firebase_uid = coalesce(public.profiles.firebase_uid, excluded.firebase_uid);
 
   return new;
 end;

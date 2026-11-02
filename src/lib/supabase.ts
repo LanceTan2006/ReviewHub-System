@@ -23,7 +23,7 @@ export async function getSupabaseClientForFirebaseUser(firebaseUser = auth.curre
     return supabase;
   }
 
-  const accessToken = await firebaseUser.getIdToken();
+  const accessToken = await firebaseUser.getIdToken(true);
 
   return createClient(supabaseUrl, supabaseAnonKey, {
     global: {

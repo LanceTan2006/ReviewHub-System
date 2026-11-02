@@ -16,6 +16,18 @@ function buildLocalPreviewAuthUser(email: string, name: string, roles: UserRole[
   return buildAuthUser(`local-${safeEmail.replace(/[^a-z0-9]/gi, '-')}`, name, safeEmail, finalRoles);
 }
 
+function getOAuthRedirectUrl(): string {
+  const defaultProductionUrl = 'https://review-hub-system.vercel.app';
+
+  const configuredUrl =
+    (import.meta.env.VITE_PUBLIC_APP_URL as string | undefined) ??
+    (import.meta.env.VITE_APP_URL as string | undefined) ??
+    (import.meta.env.APP_URL as string | undefined) ??
+    defaultProductionUrl;
+
+  return configuredUrl.replace(/\/$/, '');
+}
+
 export async function hydrateSupabaseSession(): Promise<AuthUser | null> {
   if (!supabase) {
     return null;
@@ -260,7 +272,7 @@ export async function loginGoogleHybrid(): Promise<AuthUser> {
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: window.location.origin,
+      redirectTo: getOAuthRedirectUrl(),
     },
   });
 

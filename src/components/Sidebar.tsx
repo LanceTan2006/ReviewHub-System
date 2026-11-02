@@ -26,6 +26,7 @@ const ROLE_META: Record<UserRole, { label: string; color: string; badge: string;
   frontdesk: { label: 'Front Desk',    color: '#10B981', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200', bgClass: 'bg-emerald-50' },
   proctor:   { label: 'Proctor',       color: '#F59E0B', badge: 'bg-amber-50 text-amber-700 border-amber-200',   bgClass: 'bg-amber-50' },
   manager:   { label: 'Manager',       color: '#7C3AED', badge: 'bg-purple-50 text-purple-700 border-purple-200', bgClass: 'bg-purple-50' },
+  admin:     { label: 'Admin',         color: '#DC2626', badge: 'bg-red-50 text-red-700 border-red-200',         bgClass: 'bg-red-50' },
 };
 
 // ── Nav definitions per role ───────────────────────────────────
@@ -68,6 +69,22 @@ const NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ],
 
   manager: [
+    { id: 'manager-dashboard',     label: 'Dashboard',           icon: 'bi-speedometer2',      section: 'Main' },
+    { id: 'manager-users',         label: 'User Management',     icon: 'bi-people-fill',       section: 'Administration' },
+    { id: 'manager-students',      label: 'Student Management',  icon: 'bi-mortarboard' },
+    { id: 'manager-packages',      label: 'Review Packages',     icon: 'bi-collection-fill' },
+    { id: 'manager-enrollment',    label: 'Enrollment Monitoring',icon: 'bi-clipboard-data' },
+    { id: 'manager-payments',      label: 'Payment Monitoring',  icon: 'bi-cash-coin' },
+    { id: 'manager-schedule',      label: 'Schedule Monitoring', icon: 'bi-calendar-week' },
+    { id: 'manager-reports',       label: 'Reports',             icon: 'bi-file-earmark-bar-graph', section: 'Analytics' },
+    { id: 'manager-analytics',     label: 'Analytics',           icon: 'bi-graph-up' },
+    { id: 'manager-settings',      label: 'Settings',            icon: 'bi-gear-fill',         section: 'System' },
+    { id: 'manager-backup',        label: 'Backup & Restore',    icon: 'bi-cloud-arrow-up' },
+    { id: 'manager-announcements', label: 'Announcements',       icon: 'bi-megaphone',         section: 'Communication' },
+    { id: 'manager-profile',       label: 'My Profile',          icon: 'bi-person-circle',     section: 'Account' },
+  ],
+
+  admin: [
     { id: 'manager-dashboard',     label: 'Dashboard',           icon: 'bi-speedometer2',      section: 'Main' },
     { id: 'manager-users',         label: 'User Management',     icon: 'bi-people-fill',       section: 'Administration' },
     { id: 'manager-students',      label: 'Student Management',  icon: 'bi-mortarboard' },

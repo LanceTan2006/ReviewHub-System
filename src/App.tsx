@@ -5,6 +5,7 @@ import { supabase } from './lib/supabase';
 import { loadSiteData } from './lib/siteData';
 import {
   AuthUser, PAGE_PERMISSIONS, ROLE_HOME,
+  buildAuthUser,
   hasPermission,
 } from './rbac';
 
@@ -62,10 +63,145 @@ export default function App() {
 
     hydrateSiteData();
 
+    const restoreSupabaseSession = async () => {
+      if (!supabase) {
+        const savedUser = sessionStorage.getItem('reviewhub-auth-user');
+        if (savedUser) {
+          try {
+            const parsed = JSON.parse(savedUser) as AuthUser;
+            if (parsed?.id && parsed?.email && !cancelled) {
+              setAuthUser(parsed);
+            }
+          } catch {
+            sessionStorage.removeItem('reviewhub-auth-user');
+          }
+        }
+        return;
+      }
+
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error || !session?.user || cancelled) return;
+
+        const userId = session.user.id;
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, full_name, email, is_active')
+          .eq('id', userId)
+          .maybeSingle();
+
+        if (profileError || !profile || profile.is_active === false) {
+          return;
+        }
+
+        const { data: roleRows } = await supabase
+          .from('user_roles')
+          .select('role_id')
+          .eq('profile_id', profile.id);
+
+        const roleIds = (roleRows ?? []).map((row) => row.role_id).filter(Boolean);
+        if (!roleIds.length) return;
+
+        const { data: roleData } = await supabase
+          .from('roles')
+          .select('name')
+          .in('id', roleIds);
+
+        const roles = (roleData ?? [])
+          .map((row) => row.name)
+          .filter((name): name is any => Boolean(name) && ['guest', 'student', 'frontdesk', 'proctor', 'manager', 'admin'].includes(name));
+
+        if (!roles.length) return;
+
+        const hydratedUser = buildAuthUser(profile.id, profile.full_name, profile.email, roles);
+        if (!cancelled) {
+          setAuthUser(hydratedUser);
+        }
+      } catch {
+        // Ignore restore errors and fall back to the saved browser session only.
+      }
+    };
+
+    restoreSupabaseSession();
+
+    const savedUser = sessionStorage.getItem('reviewhub-auth-user');
+    if (savedUser) {
+      try {
+        const parsed = JSON.parse(savedUser) as AuthUser;
+        if (parsed?.id && parsed?.email && !cancelled) {
+          setAuthUser((current) => current ?? parsed);
+        }
+      } catch {
+        sessionStorage.removeItem('reviewhub-auth-user');
+      }
+    }
+
+    if (supabase) {
+      const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+        if (!session?.user) {
+          setAuthUser(null);
+          return;
+        }
+
+        void (async () => {
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('id, full_name, email, is_active')
+            .eq('id', session.user.id)
+            .maybeSingle();
+
+          if (profileError || !profile || profile.is_active === false) {
+            setAuthUser(null);
+            return;
+          }
+
+          const { data: roleRows } = await supabase
+            .from('user_roles')
+            .select('role_id')
+            .eq('profile_id', profile.id);
+
+          const roleIds = (roleRows ?? []).map((row) => row.role_id).filter(Boolean);
+          if (!roleIds.length) {
+            setAuthUser(null);
+            return;
+          }
+
+          const { data: roleData } = await supabase
+            .from('roles')
+            .select('name')
+            .in('id', roleIds);
+
+          const roles = (roleData ?? [])
+            .map((row) => row.name)
+            .filter((name): name is any => Boolean(name) && ['guest', 'student', 'frontdesk', 'proctor', 'manager', 'admin'].includes(name));
+
+          if (!roles.length) {
+            setAuthUser(null);
+            return;
+          }
+
+          setAuthUser(buildAuthUser(profile.id, profile.full_name, profile.email, roles));
+        })();
+      });
+
+      return () => {
+        cancelled = true;
+        authListener.subscription.unsubscribe();
+      };
+    }
+
     return () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (authUser) {
+      sessionStorage.setItem('reviewhub-auth-user', JSON.stringify(authUser));
+    } else {
+      sessionStorage.removeItem('reviewhub-auth-user');
+    }
+  }, [authUser]);
 
   // ── Toast ───────────────────────────────────────────────────
   const showToast = (title: string, desc?: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -112,7 +248,11 @@ export default function App() {
     setCurrentPage(home);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
+
     setAuthUser(null);
     setCurrentPage('landing');
     showToast('Signed Out', 'You have been returned to the landing page.', 'info');

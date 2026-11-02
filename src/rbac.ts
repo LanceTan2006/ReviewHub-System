@@ -298,6 +298,58 @@ export interface MockUserRecord {
 // Real sample credentials remain in the database schema under supabase/schema.sql.
 export const MOCK_USERS: MockUserRecord[] = [];
 
+export async function hashPassword(password: string): Promise<string> {
+  const rawPassword = password.trim();
+  if (!rawPassword) return '';
+
+  const encoded = new TextEncoder().encode(rawPassword);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
+  return Array.from(new Uint8Array(hashBuffer), (value) => value.toString(16).padStart(2, '0')).join('');
+}
+
+export async function passwordsMatch(candidatePassword: string, storedPassword: string | null | undefined): Promise<boolean> {
+  const normalizedCandidate = candidatePassword.trim();
+  const normalizedStored = String(storedPassword ?? '').trim();
+
+  if (!normalizedCandidate || !normalizedStored) {
+    return false;
+  }
+
+  if (normalizedCandidate === normalizedStored) {
+    return true;
+  }
+
+  const hashedCandidate = await hashPassword(normalizedCandidate);
+  return hashedCandidate === normalizedStored;
+}
+
+export async function resolveLegacyProfileLogin(
+  profile: { id: string; full_name: string; email: string; password_hash?: string | null; is_active?: boolean | null },
+  password: string,
+  roleNames: UserRole[] = []
+): Promise<AuthUser | null> {
+  if (!profile || profile.is_active === false) {
+    return null;
+  }
+
+  const storedHash = profile.password_hash ?? null;
+  if (!storedHash) {
+    return null;
+  }
+
+  const passwordMatches = await passwordsMatch(password, storedHash);
+  if (!passwordMatches) {
+    return null;
+  }
+
+  const roles = normalizeRoles(roleNames);
+  if (!roles.length) {
+    return null;
+  }
+
+  return buildAuthUser(profile.id, profile.full_name, profile.email, roles);
+}
+
 /**
  * Authenticate against Supabase if configured.
  * Falls back to the local mock DB in demos and local-only scenarios.
@@ -313,46 +365,94 @@ export async function authenticateUser(email: string, password: string): Promise
   }
 
   if (supabase) {
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
+      password,
+    });
 
-    const { data: profile, error: profileError } = await supabase
+    if (!authError && authData?.user) {
+      const userId = authData.user.id;
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, password_hash, is_active')
+        .eq('id', userId)
+        .maybeSingle();
+
+      const fallbackProfile = !profile
+        ? await supabase
+            .from('profiles')
+            .select('id, full_name, email, password_hash, is_active')
+            .ilike('email', normalizedEmail)
+            .maybeSingle()
+        : null;
+
+      const resolvedProfile = profile ?? fallbackProfile?.data ?? null;
+      if (profileError || !resolvedProfile) {
+        return null;
+      }
+
+      if (resolvedProfile.is_active === false) {
+        return null;
+      }
+
+      const { data: roleRows } = await supabase
+        .from('user_roles')
+        .select('role_id')
+        .eq('profile_id', resolvedProfile.id);
+
+      const roleIds = (roleRows ?? []).map((row) => row.role_id).filter(Boolean);
+
+      if (roleIds.length === 0) {
+        return null;
+      }
+
+      const { data: roleData } = await supabase
+        .from('roles')
+        .select('name')
+        .in('id', roleIds);
+
+      const roles = (roleData ?? [])
+        .map((row) => row.name)
+        .filter((name): name is UserRole => !!name && ['guest', 'student', 'frontdesk', 'proctor', 'manager', 'admin'].includes(name));
+
+      if (roles.length === 0) {
+        return null;
+      }
+
+      return buildAuthUser(resolvedProfile.id, resolvedProfile.full_name, resolvedProfile.email, roles);
+    }
+
+    const { data: legacyProfile, error: legacyProfileError } = await supabase
       .from('profiles')
-      .select('id, full_name, email, password_hash')
+      .select('id, full_name, email, password_hash, is_active')
       .ilike('email', normalizedEmail)
       .maybeSingle();
 
-    if (profileError || !profile) {
+    if (legacyProfileError || !legacyProfile) {
       return null;
     }
 
-    if (String(profile.password_hash) !== password) {
-      return null;
-    }
-
-    const { data: roleRows } = await supabase
+    const { data: legacyRoleRows } = await supabase
       .from('user_roles')
       .select('role_id')
-      .eq('profile_id', profile.id);
+      .eq('profile_id', legacyProfile.id);
 
-    const roleIds = (roleRows ?? []).map((row) => row.role_id).filter(Boolean);
-
-    if (roleIds.length === 0) {
+    const legacyRoleIds = (legacyRoleRows ?? []).map((row) => row.role_id).filter(Boolean);
+    if (legacyRoleIds.length === 0) {
       return null;
     }
 
-    const { data: roleData } = await supabase
+    const { data: legacyRoleData } = await supabase
       .from('roles')
       .select('name')
-      .in('id', roleIds);
+      .in('id', legacyRoleIds);
 
-    const roles = (roleData ?? [])
+    const legacyRoles = (legacyRoleData ?? [])
       .map((row) => row.name)
       .filter((name): name is UserRole => !!name && ['guest', 'student', 'frontdesk', 'proctor', 'manager', 'admin'].includes(name));
 
-    if (roles.length === 0) {
-      return null;
-    }
-
-    return buildAuthUser(profile.id, profile.full_name, profile.email, roles);
+    return resolveLegacyProfileLogin(legacyProfile, password, legacyRoles);
   }
 
   const record = MOCK_USERS.find(

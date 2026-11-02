@@ -80,32 +80,52 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
       try {
         const normalizedEmail = email.trim().toLowerCase();
-        const { data: existingUser, error: existingError } = await supabase
+
+        const { data: authUser, error: authError } = await supabase.auth.signUp({
+          email: normalizedEmail,
+          password,
+          options: {
+            data: {
+              full_name: name.trim() || normalizedEmail,
+            },
+          },
+        });
+
+        if (authError) {
+          throw authError;
+        }
+
+        const authUserId = authUser?.user?.id;
+        if (!authUserId) {
+          throw new Error('Supabase did not create a valid auth user.');
+        }
+
+        const { data: existingProfile, error: profileLookupError } = await supabase
           .from('profiles')
           .select('id')
           .eq('email', normalizedEmail)
           .maybeSingle();
 
-        if (existingError) {
-          throw existingError;
+        if (profileLookupError) {
+          throw profileLookupError;
         }
 
-        if (existingUser) {
+        if (existingProfile && existingProfile.id !== authUserId) {
           setFormError('An account with that email already exists.');
           return;
         }
 
         const { data: insertedProfile, error: profileError } = await supabase
           .from('profiles')
-          .insert([
+          .upsert([
             {
+              id: authUserId,
               full_name: name.trim() || normalizedEmail,
               email: normalizedEmail,
-              password_hash: password,
               avatar_url: null,
               is_active: true,
             },
-          ])
+          ], { onConflict: 'id' })
           .select('id')
           .single();
 
@@ -129,13 +149,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
         const { error: roleInsertError } = await supabase
           .from('user_roles')
-          .insert([{ profile_id: insertedProfile.id, role_id: studentRole.id }]);
+          .upsert([
+            { profile_id: insertedProfile.id, role_id: studentRole.id },
+          ], { onConflict: 'profile_id,role_id' });
 
         if (roleInsertError) {
           throw roleInsertError;
         }
 
-        onShowToast('Account Created!', 'Your account has been saved to Supabase and can now sign in.', 'success');
+        onShowToast('Account Created!', 'Your account was created in Supabase Auth. Please confirm your email if confirmation is enabled, then sign in.', 'success');
         setIsRegister(false);
         setPassword('');
         setConfirmPw('');

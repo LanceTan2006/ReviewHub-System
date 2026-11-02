@@ -1,11 +1,14 @@
 -- ReviewHub Supabase schema
 -- This schema implements the core RBAC model, app records, and seed data for ReviewHub.
--- Replace raw password values with password_hash values in production.
+-- Supabase Auth is the source of truth for user credentials.
+-- The profiles.password_hash column is kept only for legacy compatibility and is no longer used by the application.
 -- Safe to re-run from a clean slate so partial imports do not leave missing columns behind.
 
 DROP VIEW IF EXISTS public.user_role_permissions;
 DROP VIEW IF EXISTS public.active_enrollments;
-DROP FUNCTION IF EXISTS public.set_updated_at();
+DROP TRIGGER IF EXISTS trg_profiles_updated_at ON public.profiles;
+DROP TRIGGER IF EXISTS trg_packages_updated_at ON public.review_packages;
+DROP FUNCTION IF EXISTS public.set_updated_at() CASCADE;
 DROP TABLE IF EXISTS public.ai_chat_messages CASCADE;
 DROP TABLE IF EXISTS public.ai_chat_sessions CASCADE;
 DROP TABLE IF EXISTS public.announcements CASCADE;
@@ -50,7 +53,7 @@ create table if not exists public.profiles (
   id uuid primary key default gen_random_uuid(),
   full_name text not null,
   email citext not null unique,
-  password_hash text not null,
+  password_hash text,
   avatar_url text,
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
@@ -190,6 +193,111 @@ create index if not exists idx_lessons_package_id on public.lessons(package_id);
 create index if not exists idx_quiz_questions_subject on public.quiz_questions(subject);
 create index if not exists idx_announcements_audience on public.announcements(audience);
 
+alter table public.profiles enable row level security;
+alter table public.user_roles enable row level security;
+
+create or replace function public.has_admin_or_manager_role()
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.user_roles ur
+    join public.roles r on r.id = ur.role_id
+    where ur.profile_id = auth.uid()
+      and r.name in ('admin', 'manager')
+  );
+$$;
+
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id, full_name, email, avatar_url, is_active)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
+    new.email,
+    null,
+    true
+  )
+  on conflict (id) do update
+  set full_name = coalesce(public.profiles.full_name, excluded.full_name),
+      email = excluded.email,
+      avatar_url = coalesce(public.profiles.avatar_url, excluded.avatar_url),
+      is_active = coalesce(public.profiles.is_active, true);
+
+  return new;
+end;
+$$;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+create trigger on_auth_user_created
+after insert on auth.users
+for each row execute function public.handle_new_user();
+
+create policy "profiles_select_own_or_admin"
+on public.profiles
+for select
+using (
+  auth.uid() = id
+  or public.has_admin_or_manager_role()
+);
+
+create policy "profiles_insert_own_or_admin"
+on public.profiles
+for insert
+with check (
+  auth.uid() = id
+  or public.has_admin_or_manager_role()
+);
+
+create policy "profiles_update_own_or_admin"
+on public.profiles
+for update
+using (
+  auth.uid() = id
+  or public.has_admin_or_manager_role()
+)
+with check (
+  auth.uid() = id
+  or public.has_admin_or_manager_role()
+);
+
+create policy "profiles_delete_admin_only"
+on public.profiles
+for delete
+using (public.has_admin_or_manager_role());
+
+create policy "user_roles_select_own_or_admin"
+on public.user_roles
+for select
+using (
+  profile_id = auth.uid()
+  or public.has_admin_or_manager_role()
+);
+
+create policy "user_roles_insert_admin_only"
+on public.user_roles
+for insert
+with check (public.has_admin_or_manager_role());
+
+create policy "user_roles_update_admin_only"
+on public.user_roles
+for update
+using (public.has_admin_or_manager_role())
+with check (public.has_admin_or_manager_role());
+
+create policy "user_roles_delete_admin_only"
+on public.user_roles
+for delete
+using (public.has_admin_or_manager_role());
+
 -- Seed roles
 insert into public.roles (name, description)
 values
@@ -279,12 +387,12 @@ on conflict (role_id, permission_id) do nothing;
 -- Seed sample users (kept in DB schema for real app setup)
 insert into public.profiles (full_name, email, password_hash, avatar_url, is_active)
 values
-  ('Alyssa Reyes', 'alyssa.reyes@univ.edu.ph', 'Student@123', null, true),
-  ('Maria Santos', 'maria.santos@meliorahub.edu.ph', 'FrontDesk@123', null, true),
-  ('Dr. Ramon Delgado', 'r.delgado@meliorahub.edu.ph', 'Proctor@123', null, true),
-  ('Catherine Lim', 'c.lim@meliorahub.edu.ph', 'Manager@123', null, true),
-  ('Joshua Bautista', 'j.bautista@meliorahub.edu.ph', 'MultiRole@123', null, true),
-  ('System Admin', 'admin@meliorahub.edu.ph', 'Admin@123', null, true)
+  ('Alyssa Reyes', 'alyssa.reyes@univ.edu.ph', 'b2a1f4fd0a460606b34c8913e2981dac8d2e283d778aba586c416ee2629bfa54', null, true),
+  ('Maria Santos', 'maria.santos@meliorahub.edu.ph', 'b738611c824d4524d148f8e167b34039d75210a916475f13fc1b58bfb9948d7f', null, true),
+  ('Dr. Ramon Delgado', 'r.delgado@meliorahub.edu.ph', '23620bc920eb981b1970e208170c82eceb2283beb74fd9d25e5cff3dfe5cb425', null, true),
+  ('Catherine Lim', 'c.lim@meliorahub.edu.ph', 'e8392925a98c9c22795d1fc5d0dfee5b9a6943f6b768ec5a2a0c077e5ed119cf', null, true),
+  ('Joshua Bautista', 'j.bautista@meliorahub.edu.ph', 'c7c146a8679980aefb725fed681d607f524cbb5ab58c05020657a977bd51174e', null, true),
+  ('System Admin', 'admin@meliorahub.edu.ph', 'e86f78a8a3caf0b60d8e74e5942aa6d86dc150cd3c03338aef25b7d2d7e3acc7', null, true)
 on conflict (email) do nothing;
 
 with profile_map as (

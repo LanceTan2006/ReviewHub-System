@@ -57,7 +57,7 @@ export const UserManagementPage: React.FC<UserManagementPageProps> = ({
   const [editRoles, setEditRoles] = useState<UserRole[]>([]);
   const [showPermModal, setShowPermModal] = useState<UserRole | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newStudent, setNewStudent] = useState({ name: '', email: '', password: '' });
+  const [newStudent, setNewStudent] = useState({ name: '', email: '', password: '', confirmPassword: '' });
 
   useEffect(() => {
     const loadUsers = async () => {
@@ -190,6 +190,16 @@ export const UserManagementPage: React.FC<UserManagementPageProps> = ({
       return;
     }
 
+    if (password !== newStudent.confirmPassword) {
+      onShowToast('Password Mismatch', 'The temporary password and confirmation do not match.', 'error');
+      return;
+    }
+
+    if (password.length < 8) {
+      onShowToast('Weak Password', 'Temporary password must be at least 8 characters long.', 'error');
+      return;
+    }
+
     if (!supabase) {
       onShowToast('Supabase Not Configured', 'Add the VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY environment variables before creating accounts.', 'error');
       return;
@@ -208,9 +218,30 @@ export const UserManagementPage: React.FC<UserManagementPageProps> = ({
         return;
       }
 
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: name,
+          },
+        },
+      });
+
+      if (authError || !authData?.user) {
+        throw authError ?? new Error('Supabase Auth did not create the student user.');
+      }
+
       const { data: newProfile, error: profileError } = await supabase
         .from('profiles')
-        .insert([{ full_name: name, email, password_hash: password, is_active: true }])
+        .upsert([
+          {
+            id: authData.user.id,
+            full_name: name,
+            email,
+            is_active: true,
+          },
+        ], { onConflict: 'id' })
         .select('id, full_name, email, is_active, created_at')
         .single();
 
@@ -227,7 +258,10 @@ export const UserManagementPage: React.FC<UserManagementPageProps> = ({
 
       const { error: assignError } = await supabase
         .from('user_roles')
-        .insert([{ profile_id: newProfile.id, role_id: studentRole.id }]);
+        .upsert(
+          [{ profile_id: newProfile.id, role_id: studentRole.id }],
+          { onConflict: 'profile_id,role_id' }
+        );
 
       if (assignError) throw assignError;
 
@@ -241,7 +275,7 @@ export const UserManagementPage: React.FC<UserManagementPageProps> = ({
         createdAt: new Date(newProfile.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       }, ...prev]);
 
-      setNewStudent({ name: '', email: '', password: '' });
+      setNewStudent({ name: '', email: '', password: '', confirmPassword: '' });
       setShowCreateModal(false);
       onShowToast('Student Account Created', `${name} can now sign in with the student role.`, 'success');
     } catch (error: any) {
@@ -547,6 +581,16 @@ export const UserManagementPage: React.FC<UserManagementPageProps> = ({
                 onChange={(e) => setNewStudent((prev) => ({ ...prev, password: e.target.value }))}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-[#D6ECFA] bg-[#F4FAFD] focus:outline-none focus:ring-2 focus:ring-[#3498DB]"
                 placeholder="Create a password"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-[#2C3E50] mb-1">Confirm Temporary Password</label>
+              <input
+                type="text"
+                value={newStudent.confirmPassword}
+                onChange={(e) => setNewStudent((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[#D6ECFA] bg-[#F4FAFD] focus:outline-none focus:ring-2 focus:ring-[#3498DB]"
+                placeholder="Re-enter the password"
               />
             </div>
           </div>

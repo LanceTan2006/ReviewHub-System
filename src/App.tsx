@@ -26,6 +26,7 @@ import { PortalPage }           from './pages/PortalPage';
 
 import { Menu, X } from 'lucide-react';
 import { logoutFromFirebase } from './lib/firebase';
+import { hydrateSupabaseSession } from './lib/hybridAuth';
 import logoImg from './assets/images/reviewhub_logo.png';
 
 // ── Role colour / icon map for the portal header badge ─────────
@@ -48,11 +49,28 @@ export default function App() {
   const [mobileSidebar,setMobileSidebar] = useState(false);
 
   useEffect(() => {
-    setPackages([]);
-    setLessons([]);
-    setTransactions([]);
-    setAuthUser(null);
-    sessionStorage.removeItem('reviewhub-auth-user');
+    let isMounted = true;
+
+    const loadSupabaseSession = async () => {
+      try {
+        const user = await hydrateSupabaseSession();
+        if (isMounted && user) {
+          setAuthUser(user);
+          const home = ROLE_HOME[user.primaryRole];
+          setCurrentPage(home);
+        }
+      } catch {
+        if (isMounted) {
+          setAuthUser(null);
+        }
+      }
+    };
+
+    loadSupabaseSession();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   useEffect(() => {

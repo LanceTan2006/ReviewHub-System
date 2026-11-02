@@ -1,13 +1,32 @@
 import { UserRole } from '../types';
 import { buildAuthUser, type AuthUser } from '../rbac';
 import { getSupabaseClientForFirebaseUser, supabase } from './supabase';
-import { auth, loginWithEmail, registerWithEmail, signInWithGoogleProvider } from './firebase';
+import { auth, hasFirebaseConfig, loginWithEmail, registerWithEmail, signInWithGoogleProvider } from './firebase';
+
+const LOCAL_DEMO_USERS: Record<string, { name: string; password: string; roles: UserRole[] }> = {
+  'admin@demo.local': { name: 'Local Admin', password: 'Admin123!', roles: ['admin'] },
+  'manager@demo.local': { name: 'Local Manager', password: 'Manager123!', roles: ['manager'] },
+  'frontdesk@demo.local': { name: 'Local Front Desk', password: 'Frontdesk123!', roles: ['frontdesk'] },
+  'proctor@demo.local': { name: 'Local Proctor', password: 'Proctor123!', roles: ['proctor'] },
+  'student@demo.local': { name: 'Local Student', password: 'Student123!', roles: ['student'] },
+};
+
+function buildLocalPreviewAuthUser(email: string, name: string, roles: UserRole[]): AuthUser {
+  const safeEmail = email.trim().toLowerCase();
+  const finalRoles = roles.length ? roles : ['student'];
+  return buildAuthUser(`local-${safeEmail.replace(/[^a-z0-9]/gi, '-')}`, name, safeEmail, finalRoles);
+}
 
 async function resolveAuthUserFromFirebaseProfile(firebaseUser: { uid: string; email?: string | null; displayName?: string | null }): Promise<AuthUser> {
   const normalizedEmail = firebaseUser.email?.trim().toLowerCase();
 
   if (!normalizedEmail) {
     throw new Error('This account has no email address.');
+  }
+
+  if (!hasFirebaseConfig) {
+    const localUser = LOCAL_DEMO_USERS[normalizedEmail] ?? { name: firebaseUser.displayName || normalizedEmail.split('@')[0], password: 'Student123!', roles: ['student'] as UserRole[] };
+    return buildLocalPreviewAuthUser(normalizedEmail, localUser.name, localUser.roles);
   }
 
   const client = await getSupabaseClientForFirebaseUser(firebaseUser);
@@ -149,6 +168,27 @@ export async function registerHybrid(email: string, password: string, fullName: 
   const normalizedEmail = email.trim().toLowerCase();
   const cleanName = fullName.trim() || normalizedEmail;
 
+  if (!hasFirebaseConfig) {
+    const localKey = normalizedEmail;
+    const existing = LOCAL_DEMO_USERS[localKey];
+    if (existing) {
+      throw new Error('This demo account already exists in local preview mode. Please use a different email or sign in with the existing demo credentials.');
+    }
+
+    const localProfile: Record<string, string> = {
+      email: normalizedEmail,
+      password,
+      name: cleanName,
+      role: 'student',
+    };
+    Object.assign(LOCAL_DEMO_USERS, { [localKey]: { name: cleanName, password, roles: ['student'] as UserRole[] } });
+    return {
+      uid: `local-${Date.now()}`,
+      email: localProfile.email,
+      displayName: localProfile.name,
+    };
+  }
+
   const firebaseUser = await registerWithEmail(normalizedEmail, password);
   const client = await getSupabaseClientForFirebaseUser(firebaseUser);
 
@@ -213,11 +253,31 @@ export async function registerHybrid(email: string, password: string, fullName: 
 }
 
 export async function loginHybrid(email: string, password: string): Promise<AuthUser> {
-  const firebaseUser = await loginWithEmail(email.trim().toLowerCase(), password);
+  const normalizedEmail = email.trim().toLowerCase();
+
+  if (!hasFirebaseConfig) {
+    const demoUser = LOCAL_DEMO_USERS[normalizedEmail];
+
+    if (!demoUser) {
+      throw new Error('No Firebase project is configured yet. Use one of the local preview accounts or add your Firebase variables in .env.local.');
+    }
+
+    if (demoUser.password !== password) {
+      throw new Error('Invalid local preview password.');
+    }
+
+    return buildLocalPreviewAuthUser(normalizedEmail, demoUser.name, demoUser.roles);
+  }
+
+  const firebaseUser = await loginWithEmail(normalizedEmail, password);
   return resolveAuthUserFromFirebaseProfile(firebaseUser);
 }
 
 export async function loginGoogleHybrid(): Promise<AuthUser> {
+  if (!hasFirebaseConfig) {
+    return buildLocalPreviewAuthUser('admin@demo.local', 'Local Admin', ['admin']);
+  }
+
   const firebaseUser = await signInWithGoogleProvider();
   return resolveAuthUserFromFirebaseProfile(firebaseUser);
 }

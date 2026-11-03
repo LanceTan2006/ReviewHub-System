@@ -15,6 +15,7 @@ DROP TABLE IF EXISTS public.announcements CASCADE;
 DROP TABLE IF EXISTS public.certificates CASCADE;
 DROP TABLE IF EXISTS public.mock_exam_questions CASCADE;
 DROP TABLE IF EXISTS public.mock_exams CASCADE;
+DROP TABLE IF EXISTS public.mock_exam_questions CASCADE;
 DROP TABLE IF EXISTS public.quiz_sets CASCADE;
 DROP TABLE IF EXISTS public.quiz_attempts CASCADE;
 DROP TABLE IF EXISTS public.quiz_questions CASCADE;
@@ -137,8 +138,21 @@ create table if not exists public.payment_transactions (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.quiz_sets (
+  id uuid primary key default gen_random_uuid(),
+  package_id uuid references public.review_packages(id) on delete set null,
+  title text not null,
+  subject text not null,
+  description text,
+  difficulty text not null default 'Moderate' check (difficulty in ('Easy','Moderate','Challenging')),
+  total_questions integer not null default 0,
+  created_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.quiz_questions (
   id uuid primary key default gen_random_uuid(),
+  set_id uuid references public.quiz_sets(id) on delete cascade,
   subject text not null,
   difficulty text not null check (difficulty in ('Easy','Moderate','Challenging')),
   question text not null,
@@ -207,6 +221,7 @@ create index if not exists idx_payment_transactions_profile_id on public.payment
 create index if not exists idx_lessons_package_id on public.lessons(package_id);
 create index if not exists idx_lesson_materials_lesson_id on public.lesson_materials(lesson_id);
 create index if not exists idx_quiz_questions_subject on public.quiz_questions(subject);
+create index if not exists idx_quiz_questions_set_id on public.quiz_questions(set_id);
 create index if not exists idx_announcements_audience on public.announcements(audience);
 
 alter table public.profiles enable row level security;
@@ -453,14 +468,24 @@ from (
 ) as v(package_title, title, subject, duration, instructor, materials_count, completed, progress_percent, next_quiz_available, content_summary, key_takeaways)
 join public.review_packages rp on rp.title = v.package_title;
 
--- Seed quiz questions
-insert into public.quiz_questions (subject, difficulty, question, options, correct_index, explanation)
+-- Seed quiz sets
+insert into public.quiz_sets (title, subject, difficulty, total_questions)
 values
-  ('Thermodynamics', 'Moderate', 'According to the Second Law of Thermodynamics, which statement correctly describes the behavior of a closed natural system?', ARRAY['The total energy always increases','The entropy of an isolated system never decreases spontaneously','Heat flows from cold to hot without work','Absolute zero is achievable in finite cycles'], 1, 'The entropy of an isolated system always increases or remains constant over time. Natural processes are irreversible.'),
-  ('Constitutional Law', 'Easy', 'Which constitutional section protects a person from self-incrimination during custodial investigations?', ARRAY['Article III, Section 12','Article V, Section 2','Article VI, Section 1','Article IX, Section 2'], 0, 'Article III, Section 12 protects the right to remain silent and to have independent counsel.'),
-  ('Fluid Dynamics', 'Moderate', 'If Reynolds number is 1450 in a pipe, which flow regime is present?', ARRAY['Turbulent','Critical transition','Laminar','Sonic'], 2, 'Re < 2100 indicates laminar flow inside pipes.'),
-  ('Organic Chemistry', 'Challenging', 'Which compound gives a positive Tollens test?', ARRAY['Propanone','Benzophenone','Ethanal','Ethyl ethanoate'], 2, 'Aldehydes reduce Tollens reagent to silver metal. Ethanal is an aldehyde.'),
-  ('Statistics', 'Easy', 'If variance is 36, what is the standard deviation?', ARRAY['18','6','72','1296'], 1, 'The standard deviation is the square root of the variance: sqrt(36) = 6.');
+  ('General Board Exam Drill', 'Mixed', 'Moderate', 5)
+on conflict do nothing;
+
+-- Seed quiz questions (attached to the first quiz set)
+insert into public.quiz_questions (set_id, subject, difficulty, question, options, correct_index, explanation)
+select qs.id, v.subject, v.difficulty, v.question, v.options, v.correct_index, v.explanation
+from (
+  values
+    ('Thermodynamics', 'Moderate', 'According to the Second Law of Thermodynamics, which statement correctly describes the behavior of a closed natural system?', ARRAY['The total energy always increases','The entropy of an isolated system never decreases spontaneously','Heat flows from cold to hot without work','Absolute zero is achievable in finite cycles'], 1, 'The entropy of an isolated system always increases or remains constant over time. Natural processes are irreversible.'),
+    ('Constitutional Law', 'Easy', 'Which constitutional section protects a person from self-incrimination during custodial investigations?', ARRAY['Article III, Section 12','Article V, Section 2','Article VI, Section 1','Article IX, Section 2'], 0, 'Article III, Section 12 protects the right to remain silent and to have independent counsel.'),
+    ('Fluid Dynamics', 'Moderate', 'If Reynolds number is 1450 in a pipe, which flow regime is present?', ARRAY['Turbulent','Critical transition','Laminar','Sonic'], 2, 'Re < 2100 indicates laminar flow inside pipes.'),
+    ('Organic Chemistry', 'Challenging', 'Which compound gives a positive Tollens test?', ARRAY['Propanone','Benzophenone','Ethanal','Ethyl ethanoate'], 2, 'Aldehydes reduce Tollens reagent to silver metal. Ethanal is an aldehyde.'),
+    ('Statistics', 'Easy', 'If variance is 36, what is the standard deviation?', ARRAY['18','6','72','1296'], 1, 'The standard deviation is the square root of the variance: sqrt(36) = 6.')
+) as v(subject, difficulty, question, options, correct_index, explanation)
+cross join (select id from public.quiz_sets where title = 'General Board Exam Drill' limit 1) qs;
 
 -- Seed announcements
 insert into public.announcements (title, body, audience, created_by)

@@ -12,26 +12,6 @@ function isPdf(file: File) {
   return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
 }
 
-async function insertLessonMaterialRow(row: {
-  lesson_id: string;
-  file_name: string;
-  file_path: string;
-  file_size: number;
-  mime_type: string;
-}) {
-  if (!supabase) {
-    throw new Error('Supabase is not configured.');
-  }
-
-  const { error } = await supabase.from('lesson_materials').insert([row]);
-  if (!error) return;
-
-  const fallback = await supabase.from('lesson_material').insert([row]);
-  if (fallback.error) {
-    throw new Error(error.message);
-  }
-}
-
 export async function createLessonWithPdfs(
   lesson: Lesson,
   files: File[],
@@ -88,25 +68,30 @@ export async function createLessonWithPdfs(
 
   for (const file of pdfs) {
     const path = `${lessonId}/${Date.now()}-${sanitizeFileName(file.name)}`;
-    const { error: uploadError } = await supabase.storage
+    const { data: uploaded, error: uploadError } = await supabase.storage
       .from(LESSON_FILES_BUCKET)
       .upload(path, file, {
         cacheControl: '3600',
         upsert: false,
-        contentType: 'application/pdf',
+        contentType: file.type || 'application/pdf',
       });
 
     if (uploadError) {
       throw new Error(`Could not upload "${file.name}": ${uploadError.message}`);
     }
 
-    await insertLessonMaterialRow({
+    const { error: materialError } = await supabase.from('lesson_materials').insert({
       lesson_id: lessonId,
+      title: file.name,
       file_name: file.name,
-      file_path: path,
+      object_path: uploaded?.path ?? path,
+      mime_type: file.type || 'application/pdf',
       file_size: file.size,
-      mime_type: 'application/pdf',
     });
+
+    if (materialError) {
+      throw new Error(materialError.message);
+    }
   }
 
   return { lessonId };

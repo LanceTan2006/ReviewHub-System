@@ -105,8 +105,9 @@ create table if not exists public.lessons (
 create table if not exists public.lesson_materials (
   id uuid primary key default gen_random_uuid(),
   lesson_id uuid not null references public.lessons(id) on delete cascade,
+  title text not null,
   file_name text not null,
-  file_path text not null,
+  object_path text not null,
   file_size bigint,
   mime_type text,
   created_at timestamptz not null default now()

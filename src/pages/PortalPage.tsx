@@ -590,11 +590,22 @@ export const PortalPage: React.FC<PortalPageProps> = ({
 
 // ── Inline: Proctor Quiz Manager ───────────────────────────────
 const QuizManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }> = ({ onShowToast }) => {
+  type QuestionEntry = {
+    id: string;
+    prompt: string;
+    options: string[];
+    correctAnswer: string;
+    explanation: string;
+  };
+
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [sets, setSets] = useState<Array<{ id: string; title: string; subject: string; count: number; difficulty: string; lastUpdated: string }>>([]);
   const [draft, setDraft] = useState({ title: '', subject: '', difficulty: 'Moderate', count: '12' });
+  const [questionBuilderSetId, setQuestionBuilderSetId] = useState<string | null>(null);
+  const [questionForm, setQuestionForm] = useState({ prompt: '', optionA: '', optionB: '', optionC: '', optionD: '', correctAnswer: 'A', explanation: '' });
+  const [questionsBySet, setQuestionsBySet] = useState<Record<string, QuestionEntry[]>>({});
 
   const filtered = sets.filter((q) =>
     q.subject.toLowerCase().includes(search.toLowerCase()) ||
@@ -605,6 +616,10 @@ const QuizManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }>
     Easy: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     Moderate: 'bg-amber-50 text-amber-700 border-amber-200',
     Challenging: 'bg-red-50 text-red-600 border-red-200',
+  };
+
+  const resetQuestionForm = () => {
+    setQuestionForm({ prompt: '', optionA: '', optionB: '', optionC: '', optionD: '', correctAnswer: 'A', explanation: '' });
   };
 
   const resetDraft = () => {
@@ -625,6 +640,11 @@ const QuizManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }>
     setIsModalOpen(true);
   };
 
+  const openQuestionBuilder = (setId: string) => {
+    setQuestionBuilderSetId(setId);
+    resetQuestionForm();
+  };
+
   const saveSet = () => {
     if (!draft.title.trim() || !draft.subject.trim()) {
       onShowToast('Missing details', 'Please add both the quiz title and subject.', 'error');
@@ -642,9 +662,41 @@ const QuizManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }>
     };
 
     setSets((prev) => editingId ? prev.map((item) => item.id === editingId ? { ...item, ...payload } : item) : [payload, ...prev]);
+    if (!editingId) {
+      setQuestionsBySet((prev) => ({ ...prev, [payload.id]: [] }));
+    }
     onShowToast(editingId ? 'Quiz set updated' : 'Quiz set created', editingId ? `Updated ${payload.title}.` : `Created ${payload.title}.`, 'success');
     resetDraft();
   };
+
+  const addQuestionToSet = () => {
+    if (!questionBuilderSetId) return;
+    if (!questionForm.prompt.trim() || !questionForm.optionA.trim() || !questionForm.optionB.trim() || !questionForm.optionC.trim() || !questionForm.optionD.trim()) {
+      onShowToast('Question incomplete', 'Please fill in the question prompt and all four options.', 'error');
+      return;
+    }
+
+    const newQuestion: QuestionEntry = {
+      id: `q-${Date.now()}`,
+      prompt: questionForm.prompt.trim(),
+      options: [questionForm.optionA.trim(), questionForm.optionB.trim(), questionForm.optionC.trim(), questionForm.optionD.trim()],
+      correctAnswer: questionForm.correctAnswer,
+      explanation: questionForm.explanation.trim(),
+    };
+
+    setQuestionsBySet((prev) => ({
+      ...prev,
+      [questionBuilderSetId]: [...(prev[questionBuilderSetId] ?? []), newQuestion],
+    }));
+
+    setSets((prev) => prev.map((item) => item.id === questionBuilderSetId ? { ...item, count: (prev.find((entry) => entry.id === questionBuilderSetId)?.count ?? 0) + 1, lastUpdated: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) } : item));
+
+    resetQuestionForm();
+    onShowToast('Question added', 'The question has been added to this quiz set.', 'success');
+  };
+
+  const builderSet = sets.find((set) => set.id === questionBuilderSetId);
+  const builderQuestions = questionBuilderSetId ? questionsBySet[questionBuilderSetId] ?? [] : [];
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12">
@@ -655,7 +707,7 @@ const QuizManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }>
           </div>
           <div>
             <h1 className="text-2xl font-extrabold text-[#2C3E50]">Quiz Management</h1>
-            <p className="text-sm text-[#64748B] mt-1">Create, edit, and organize question sets for practice quizzes.</p>
+            <p className="text-sm text-[#64748B] mt-1">Create quiz sets and input the actual questions used by the quiz.</p>
           </div>
         </div>
         <Button variant="primary" size="md" onClick={openCreate}>
@@ -676,7 +728,7 @@ const QuizManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }>
               <i className="bi bi-question-circle" aria-hidden="true" />
             </div>
             <h3 className="text-lg font-bold text-[#2C3E50]">No quiz sets yet</h3>
-            <p className="mt-2 text-sm text-[#64748B]">Create the first quiz bank for a subject and add the question set later in Supabase.</p>
+            <p className="mt-2 text-sm text-[#64748B]">Create a quiz set and add individual questions to build the quiz content.</p>
             <div className="mt-5 flex justify-center">
               <Button variant="primary" size="md" onClick={openCreate}>Create Quiz Set</Button>
             </div>
@@ -707,9 +759,14 @@ const QuizManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }>
                     </td>
                     <td className="py-3.5 px-5 text-[#64748B]">{q.lastUpdated}</td>
                     <td className="py-3.5 px-5 text-right">
-                      <Button variant="secondary" size="sm" onClick={() => openEdit(q)}>
-                        <i className="bi bi-pencil mr-1" aria-hidden="true" />Edit
-                      </Button>
+                      <div className="flex justify-end gap-2">
+                        <Button variant="secondary" size="sm" onClick={() => openEdit(q)}>
+                          <i className="bi bi-pencil mr-1" aria-hidden="true" />Edit
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => openQuestionBuilder(q.id)}>
+                          <i className="bi bi-plus-circle mr-1" aria-hidden="true" />Questions
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -753,21 +810,102 @@ const QuizManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }>
           <Button variant="primary" size="md" onClick={saveSet}>{editingId ? 'Update Quiz Set' : 'Save Quiz Set'}</Button>
         </div>
       </Modal>
+
+      <Modal isOpen={Boolean(questionBuilderSetId)} onClose={() => setQuestionBuilderSetId(null)} title={builderSet ? `Add Questions - ${builderSet.title}` : 'Add Questions'} subtitle="Add the actual questions and answer choices for this quiz set." maxWidth="2xl">
+        <div className="space-y-5">
+          <div className="space-y-4 rounded-2xl border border-[#E1EFF7] bg-[#F9FCFF] p-4">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-[#2C3E50] mb-2">Question prompt</label>
+              <textarea value={questionForm.prompt} onChange={(e) => setQuestionForm({ ...questionForm, prompt: e.target.value })} rows={3} className="w-full rounded-xl border border-[#D6ECFA] bg-white px-3 py-2.5 text-sm text-[#2C3E50] focus:outline-none focus:ring-2 focus:ring-[#3498DB]" placeholder="Enter the question text here..." />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {['A', 'B', 'C', 'D'].map((choice) => (
+                <div key={choice}>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#2C3E50] mb-2">Option {choice}</label>
+                  <input value={questionForm[`option${choice}` as keyof typeof questionForm] as string} onChange={(e) => setQuestionForm({ ...questionForm, [`option${choice}`]: e.target.value })} className="w-full rounded-xl border border-[#D6ECFA] bg-white px-3 py-2.5 text-sm text-[#2C3E50] focus:outline-none focus:ring-2 focus:ring-[#3498DB]" placeholder={`Choice ${choice}`} />
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#2C3E50] mb-2">Correct answer</label>
+                <select value={questionForm.correctAnswer} onChange={(e) => setQuestionForm({ ...questionForm, correctAnswer: e.target.value })} className="w-full rounded-xl border border-[#D6ECFA] bg-white px-3 py-2.5 text-sm text-[#2C3E50] focus:outline-none focus:ring-2 focus:ring-[#3498DB]">
+                  <option value="A">A</option>
+                  <option value="B">B</option>
+                  <option value="C">C</option>
+                  <option value="D">D</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#2C3E50] mb-2">Explanation</label>
+                <input value={questionForm.explanation} onChange={(e) => setQuestionForm({ ...questionForm, explanation: e.target.value })} className="w-full rounded-xl border border-[#D6ECFA] bg-white px-3 py-2.5 text-sm text-[#2C3E50] focus:outline-none focus:ring-2 focus:ring-[#3498DB]" placeholder="Optional explanation" />
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <Button variant="primary" size="md" onClick={addQuestionToSet}>Add Question</Button>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="text-xs font-bold uppercase tracking-wider text-[#2C3E50]">Questions in this set</div>
+            {builderQuestions.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-[#D6ECFA] bg-white p-5 text-sm text-[#64748B] text-center">No questions added yet.</div>
+            ) : (
+              builderQuestions.map((question, index) => (
+                <div key={question.id} className="rounded-xl border border-[#E1EFF7] bg-white p-4">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#3498DB]">Question {index + 1}</span>
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#D6ECFA] text-[#2C3E50]">Correct: {question.correctAnswer}</span>
+                  </div>
+                  <div className="text-sm font-semibold text-[#2C3E50]">{question.prompt}</div>
+                  <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-[#64748B]">
+                    {question.options.map((option, optionIndex) => (
+                      <div key={optionIndex} className={`rounded-lg border px-2 py-1.5 ${question.correctAnswer === String.fromCharCode(65 + optionIndex) ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-[#E1EFF7] bg-[#F9FCFF]'}`}>
+                        {String.fromCharCode(65 + optionIndex)}. {option}
+                      </div>
+                    ))}
+                  </div>
+                  {question.explanation && <div className="mt-2 text-xs text-[#64748B]">Explanation: {question.explanation}</div>}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };
 
 // ── Inline: Proctor Mock Exam Manager ─────────────────────────
 const MockExamManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }> = ({ onShowToast }) => {
+  type QuestionEntry = {
+    id: string;
+    prompt: string;
+    options: string[];
+    correctAnswer: string;
+    explanation: string;
+  };
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [exams, setExams] = useState<Array<{ id: string; title: string; date: string; duration: string; takers: number; avg: string; status: string }>>([]);
   const [draft, setDraft] = useState({ title: '', date: '', duration: '4 hours', takers: '0', avg: '—', status: 'Draft' });
+  const [questionBuilderExamId, setQuestionBuilderExamId] = useState<string | null>(null);
+  const [mockQuestionForm, setMockQuestionForm] = useState({ prompt: '', optionA: '', optionB: '', optionC: '', optionD: '', correctAnswer: 'A', explanation: '' });
+  const [questionsByExam, setQuestionsByExam] = useState<Record<string, QuestionEntry[]>>({});
 
   const statusColors: Record<string, string> = {
     Scheduled: 'bg-blue-50 text-blue-700 border-blue-200',
     Draft: 'bg-gray-50 text-gray-600 border-gray-200',
     Completed: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  };
+
+  const resetMockQuestionForm = () => {
+    setMockQuestionForm({ prompt: '', optionA: '', optionB: '', optionC: '', optionD: '', correctAnswer: 'A', explanation: '' });
   };
 
   const resetDraft = () => {
@@ -788,6 +926,11 @@ const MockExamManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'
     setIsModalOpen(true);
   };
 
+  const openQuestionBuilder = (examId: string) => {
+    setQuestionBuilderExamId(examId);
+    resetMockQuestionForm();
+  };
+
   const saveExam = () => {
     if (!draft.title.trim() || !draft.date.trim()) {
       onShowToast('Missing exam details', 'Please add the exam title and date.', 'error');
@@ -805,9 +948,39 @@ const MockExamManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'
     };
 
     setExams((prev) => editingId ? prev.map((item) => item.id === editingId ? { ...item, ...payload } : item) : [payload, ...prev]);
+    if (!editingId) {
+      setQuestionsByExam((prev) => ({ ...prev, [payload.id]: [] }));
+    }
     onShowToast(editingId ? 'Mock exam updated' : 'Mock exam created', editingId ? `Updated ${payload.title}.` : `Created ${payload.title}.`, 'success');
     resetDraft();
   };
+
+  const addQuestionToExam = () => {
+    if (!questionBuilderExamId) return;
+    if (!mockQuestionForm.prompt.trim() || !mockQuestionForm.optionA.trim() || !mockQuestionForm.optionB.trim() || !mockQuestionForm.optionC.trim() || !mockQuestionForm.optionD.trim()) {
+      onShowToast('Question incomplete', 'Please fill in the question prompt and all four options.', 'error');
+      return;
+    }
+
+    const newQuestion: QuestionEntry = {
+      id: `mq-${Date.now()}`,
+      prompt: mockQuestionForm.prompt.trim(),
+      options: [mockQuestionForm.optionA.trim(), mockQuestionForm.optionB.trim(), mockQuestionForm.optionC.trim(), mockQuestionForm.optionD.trim()],
+      correctAnswer: mockQuestionForm.correctAnswer,
+      explanation: mockQuestionForm.explanation.trim(),
+    };
+
+    setQuestionsByExam((prev) => ({
+      ...prev,
+      [questionBuilderExamId]: [...(prev[questionBuilderExamId] ?? []), newQuestion],
+    }));
+
+    resetMockQuestionForm();
+    onShowToast('Question added', 'The question has been added to this mock exam.', 'success');
+  };
+
+  const builderExam = exams.find((exam) => exam.id === questionBuilderExamId);
+  const builderQuestions = questionBuilderExamId ? questionsByExam[questionBuilderExamId] ?? [] : [];
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12">
@@ -818,13 +991,14 @@ const MockExamManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'
           </div>
           <div>
             <h1 className="text-2xl font-extrabold text-[#2C3E50]">Mock Exam Management</h1>
-            <p className="text-sm text-[#64748B] mt-1">Schedule, configure, and review full-length mock examinations.</p>
+            <p className="text-sm text-[#64748B] mt-1">Create mock exams and input the questions used in the exam.</p>
           </div>
         </div>
         <Button variant="primary" size="md" onClick={openCreate}>
           <i className="bi bi-plus-lg mr-1.5" aria-hidden="true" />Create Mock Exam
         </Button>
       </div>
+
       {exams.length === 0 ? (
         <Card className="border-dashed border-[#D6ECFA] bg-[#F9FCFF]">
           <CardBody className="p-10 text-center">
@@ -832,7 +1006,7 @@ const MockExamManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'
               <i className="bi bi-file-earmark-ruled" aria-hidden="true" />
             </div>
             <h3 className="text-lg font-bold text-[#2C3E50]">No mock exams yet</h3>
-            <p className="mt-2 text-sm text-[#64748B]">Create the first mock exam and add question sets later when your Supabase database is ready.</p>
+            <p className="mt-2 text-sm text-[#64748B]">Create an exam and then add the actual question set for the mock evaluation.</p>
             <div className="mt-5 flex justify-center">
               <Button variant="primary" size="md" onClick={openCreate}>Create Mock Exam</Button>
             </div>
@@ -852,9 +1026,14 @@ const MockExamManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'
                   <div><i className="bi bi-calendar3 mr-1" aria-hidden="true" />{e.date}</div>
                   <div><i className="bi bi-people mr-1" aria-hidden="true" />{e.takers} takers · Avg: {e.avg}</div>
                 </div>
-                <Button variant="secondary" size="sm" className="w-full justify-center" onClick={() => openEdit(e)}>
-                  {e.status === 'Completed' ? 'View Results' : 'Edit Exam'}
-                </Button>
+                <div className="flex gap-2">
+                  <Button variant="secondary" size="sm" className="flex-1 justify-center" onClick={() => openEdit(e)}>
+                    {e.status === 'Completed' ? 'View Results' : 'Edit Exam'}
+                  </Button>
+                  <Button variant="outline" size="sm" className="flex-1 justify-center" onClick={() => openQuestionBuilder(e.id)}>
+                    Questions
+                  </Button>
+                </div>
               </CardBody>
             </Card>
           ))}
@@ -903,6 +1082,72 @@ const MockExamManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'
         <div className="flex items-center justify-end gap-3">
           <Button variant="secondary" size="md" onClick={resetDraft}>Cancel</Button>
           <Button variant="primary" size="md" onClick={saveExam}>{editingId ? 'Update Mock Exam' : 'Save Mock Exam'}</Button>
+        </div>
+      </Modal>
+
+      <Modal isOpen={Boolean(questionBuilderExamId)} onClose={() => setQuestionBuilderExamId(null)} title={builderExam ? `Add Questions - ${builderExam.title}` : 'Add Questions'} subtitle="Add the actual question list for this mock exam." maxWidth="2xl">
+        <div className="space-y-5">
+          <div className="space-y-4 rounded-2xl border border-[#E1EFF7] bg-[#F9FCFF] p-4">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-[#2C3E50] mb-2">Question prompt</label>
+              <textarea value={mockQuestionForm.prompt} onChange={(e) => setMockQuestionForm({ ...mockQuestionForm, prompt: e.target.value })} rows={3} className="w-full rounded-xl border border-[#D6ECFA] bg-white px-3 py-2.5 text-sm text-[#2C3E50] focus:outline-none focus:ring-2 focus:ring-[#3498DB]" placeholder="Enter the question text here..." />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {['A', 'B', 'C', 'D'].map((choice) => (
+                <div key={choice}>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#2C3E50] mb-2">Option {choice}</label>
+                  <input value={mockQuestionForm[`option${choice}` as keyof typeof mockQuestionForm] as string} onChange={(e) => setMockQuestionForm({ ...mockQuestionForm, [`option${choice}`]: e.target.value })} className="w-full rounded-xl border border-[#D6ECFA] bg-white px-3 py-2.5 text-sm text-[#2C3E50] focus:outline-none focus:ring-2 focus:ring-[#3498DB]" placeholder={`Choice ${choice}`} />
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#2C3E50] mb-2">Correct answer</label>
+                <select value={mockQuestionForm.correctAnswer} onChange={(e) => setMockQuestionForm({ ...mockQuestionForm, correctAnswer: e.target.value })} className="w-full rounded-xl border border-[#D6ECFA] bg-white px-3 py-2.5 text-sm text-[#2C3E50] focus:outline-none focus:ring-2 focus:ring-[#3498DB]">
+                  <option value="A">A</option>
+                  <option value="B">B</option>
+                  <option value="C">C</option>
+                  <option value="D">D</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#2C3E50] mb-2">Explanation</label>
+                <input value={mockQuestionForm.explanation} onChange={(e) => setMockQuestionForm({ ...mockQuestionForm, explanation: e.target.value })} className="w-full rounded-xl border border-[#D6ECFA] bg-white px-3 py-2.5 text-sm text-[#2C3E50] focus:outline-none focus:ring-2 focus:ring-[#3498DB]" placeholder="Optional explanation" />
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <Button variant="primary" size="md" onClick={addQuestionToExam}>Add Question</Button>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="text-xs font-bold uppercase tracking-wider text-[#2C3E50]">Questions in this mock exam</div>
+            {builderQuestions.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-[#D6ECFA] bg-white p-5 text-sm text-[#64748B] text-center">No questions added yet.</div>
+            ) : (
+              builderQuestions.map((question, index) => (
+                <div key={question.id} className="rounded-xl border border-[#E1EFF7] bg-white p-4">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#3498DB]">Question {index + 1}</span>
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#D6ECFA] text-[#2C3E50]">Correct: {question.correctAnswer}</span>
+                  </div>
+                  <div className="text-sm font-semibold text-[#2C3E50]">{question.prompt}</div>
+                  <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-[#64748B]">
+                    {question.options.map((option, optionIndex) => (
+                      <div key={optionIndex} className={`rounded-lg border px-2 py-1.5 ${question.correctAnswer === String.fromCharCode(65 + optionIndex) ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-[#E1EFF7] bg-[#F9FCFF]'}`}>
+                        {String.fromCharCode(65 + optionIndex)}. {option}
+                      </div>
+                    ))}
+                  </div>
+                  {question.explanation && <div className="mt-2 text-xs text-[#64748B]">Explanation: {question.explanation}</div>}
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </Modal>
     </div>

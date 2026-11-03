@@ -115,6 +115,17 @@ export interface Lesson {
   packageId?: string;
   contentSummary?: string;
   keyTakeaways?: string[];
+  /** PDF / file attachments fetched from Supabase lesson_materials */
+  materials?: LessonMaterial[];
+}
+
+export interface LessonMaterial {
+  id: string;
+  title: string;
+  fileName: string;
+  objectPath: string;   // Supabase Storage object path, e.g. "lessons/les-1/notes.pdf"
+  mimeType: string;
+  fileSize: number;     // bytes
 }
 
 export interface PaymentTransaction {

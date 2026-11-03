@@ -323,3 +323,60 @@ export async function fetchCertificates(profileId?: string) {
   if (error || !data) return [];
   return data;
 }
+
+// ── Supabase Storage bucket name where lesson PDFs are stored ──
+const LESSON_MATERIALS_BUCKET = 'lesson-materials';
+
+/**
+ * Generate a signed URL (valid for 1 hour) for a private storage object,
+ * or a public URL if the bucket is set to public.
+ * Falls back to a direct public URL if signing fails.
+ *
+ * @param objectPath  The `object_path` value from lesson_materials table,
+ *                    e.g. "lessons/les-1/thermodynamics_notes.pdf"
+ * @returns           A URL string, or null on failure.
+ */
+export async function getPdfUrl(objectPath: string): Promise<string | null> {
+  if (!supabase) return null;
+
+  // Try signed URL first (works for private buckets)
+  const { data: signedData, error: signedError } = await supabase.storage
+    .from(LESSON_MATERIALS_BUCKET)
+    .createSignedUrl(objectPath, 3600); // 1 hour
+
+  if (!signedError && signedData?.signedUrl) {
+    return signedData.signedUrl;
+  }
+
+  // Fallback: public URL (works for public buckets)
+  const { data: publicData } = supabase.storage
+    .from(LESSON_MATERIALS_BUCKET)
+    .getPublicUrl(objectPath);
+
+  return publicData?.publicUrl ?? null;
+}
+
+/**
+ * Fetch all materials for a single lesson from Supabase.
+ * Returns the full material records including object_path.
+ */
+export async function fetchLessonMaterialsForLesson(lessonId: string) {
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from('lesson_materials')
+    .select('id, title, file_name, object_path, mime_type, file_size')
+    .eq('lesson_id', lessonId)
+    .order('created_at', { ascending: true });
+
+  if (error || !data) return [];
+
+  return data.map((m: any) => ({
+    id: m.id,
+    title: m.title || m.file_name,
+    fileName: m.file_name,
+    objectPath: m.object_path,
+    mimeType: m.mime_type || 'application/pdf',
+    fileSize: m.file_size || 0,
+  }));
+}

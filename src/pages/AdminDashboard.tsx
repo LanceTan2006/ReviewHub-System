@@ -51,7 +51,7 @@ interface AdminDashboardProps {
   onUpdatePackage?: (pkg: ReviewPackage) => void;
   onDeletePackage?: (id: string) => void;
   lessons?: Lesson[];
-  onAddLesson?: (lesson: Lesson) => void;
+  onAddLesson?: (lesson: Lesson, pdfFiles?: File[]) => void | Promise<void>;
   transactions?: PaymentTransaction[];
   onVerifyPaymentTransaction?: (id: string) => void;
   /** Which tabs to show. Defaults to all four. Use to restrict per role. */
@@ -185,6 +185,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // PDF attachment state for lesson modal
   const [lessonPdfFiles, setLessonPdfFiles] = useState<File[]>([]);
+  const [isPublishingLesson, setIsPublishingLesson] = useState(false);
 
   const handlePdfSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -356,10 +357,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }, 600);
   };
 
-  const handleLessonSubmit = (e: React.FormEvent) => {
+  const handleLessonSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!lessonForm.title.trim()) return;
+    if (!lessonForm.title.trim() || isPublishingLesson) return;
 
+    const attachedPdfs = [...lessonPdfFiles];
+    const matchedPackage = packagesList.find((pkg) => pkg.title === lessonForm.packageTitle);
     const newLesson: Lesson = {
       id: `les-${Date.now()}`,
       title: lessonForm.title,
@@ -368,26 +371,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       completed: false,
       progressPercent: 0,
       instructor: lessonForm.instructor,
-      // Total materials = manually entered count + attached PDFs
-      materialsCount: lessonForm.materialsCount + lessonPdfFiles.length,
+      materialsCount: lessonForm.materialsCount + attachedPdfs.length,
       nextQuizAvailable: lessonForm.nextQuizAvailable,
       contentSummary: lessonForm.contentSummary,
       keyTakeaways: lessonForm.keyTakeaways,
+      packageId: matchedPackage?.id,
     };
 
-    if (onAddLesson) {
-      onAddLesson(newLesson);
-    } else {
-      setLocalLessons([newLesson, ...localLessons]);
-    }
+    setIsPublishingLesson(true);
+    try {
+      if (onAddLesson) {
+        await onAddLesson(newLesson, attachedPdfs);
+      } else {
+        setLocalLessons([newLesson, ...localLessons]);
+      }
 
-    setIsLessonModalOpen(false);
-    setLessonPdfFiles([]);
-    onShowToast(
-      'Lesson Published to Curriculum!',
-      `"${newLesson.title}" published${lessonPdfFiles.length > 0 ? ` with ${lessonPdfFiles.length} PDF attachment${lessonPdfFiles.length > 1 ? 's' : ''}` : ''}.`,
-      'success'
-    );
+      setIsLessonModalOpen(false);
+      setLessonPdfFiles([]);
+      onShowToast(
+        'Lesson Published to Curriculum!',
+        `"${newLesson.title}" published${attachedPdfs.length > 0 ? ` with ${attachedPdfs.length} PDF attachment${attachedPdfs.length > 1 ? 's' : ''}` : ''}.`,
+        'success'
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'The lesson could not be saved.';
+      onShowToast('Could not publish lesson', message, 'error');
+    } finally {
+      setIsPublishingLesson(false);
+    }
   };
 
   const handleVerifyTx = (txId: string) => {
@@ -947,11 +958,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
 
           <div className="pt-4 flex items-center justify-end gap-3 border-t border-[#F0F6FA]">
-            <Button variant="secondary" size="md" onClick={() => setIsLessonModalOpen(false)}>
+            <Button variant="secondary" size="md" onClick={() => setIsLessonModalOpen(false)} disabled={isPublishingLesson}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" size="md" icon={<BookOpen className="w-4 h-4" />}>
-              Publish Lesson to Curriculum
+            <Button type="submit" variant="primary" size="md" icon={<BookOpen className="w-4 h-4" />} disabled={isPublishingLesson}>
+              {isPublishingLesson ? 'Uploading…' : 'Publish Lesson to Curriculum'}
             </Button>
           </div>
         </form>

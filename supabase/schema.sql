@@ -18,6 +18,7 @@ DROP TABLE IF EXISTS public.quiz_attempts CASCADE;
 DROP TABLE IF EXISTS public.quiz_questions CASCADE;
 DROP TABLE IF EXISTS public.payment_transactions CASCADE;
 DROP TABLE IF EXISTS public.enrollments CASCADE;
+DROP TABLE IF EXISTS public.lesson_materials CASCADE;
 DROP TABLE IF EXISTS public.lessons CASCADE;
 DROP TABLE IF EXISTS public.review_packages CASCADE;
 DROP TABLE IF EXISTS public.user_roles CASCADE;
@@ -98,6 +99,16 @@ create table if not exists public.lessons (
   next_quiz_available boolean not null default false,
   content_summary text,
   key_takeaways text[] default '{}',
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.lesson_materials (
+  id uuid primary key default gen_random_uuid(),
+  lesson_id uuid not null references public.lessons(id) on delete cascade,
+  file_name text not null,
+  file_path text not null,
+  file_size bigint,
+  mime_type text,
   created_at timestamptz not null default now()
 );
 
@@ -191,6 +202,7 @@ create index if not exists idx_user_roles_role_id on public.user_roles(role_id);
 create index if not exists idx_enrollments_profile_id on public.enrollments(profile_id);
 create index if not exists idx_payment_transactions_profile_id on public.payment_transactions(profile_id);
 create index if not exists idx_lessons_package_id on public.lessons(package_id);
+create index if not exists idx_lesson_materials_lesson_id on public.lesson_materials(lesson_id);
 create index if not exists idx_quiz_questions_subject on public.quiz_questions(subject);
 create index if not exists idx_announcements_audience on public.announcements(audience);
 

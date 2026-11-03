@@ -27,6 +27,7 @@ import { PortalPage }           from './pages/PortalPage';
 import { Menu, X } from 'lucide-react';
 import { logoutFromFirebase } from './lib/firebase';
 import { hydrateSupabaseSession } from './lib/hybridAuth';
+import { createLessonWithPdfs } from './lib/lessonMaterials';
 import logoImg from './assets/images/reviewhub_logo.png';
 
 // ── Role colour / icon map for the portal header badge ─────────
@@ -203,27 +204,11 @@ export default function App() {
     setPackages((prev) => prev.filter((x) => x.id !== id));
   };
 
-  const handleAddLesson = async (l: Lesson) => {
+  const handleAddLesson = async (l: Lesson, pdfFiles: File[] = []) => {
     if (supabase) {
-      const { error } = await supabase.from('lessons').insert([
-        {
-          title: l.title,
-          subject: l.subject,
-          duration: l.duration,
-          completed: l.completed,
-          progress_percent: l.progressPercent,
-          instructor: l.instructor,
-          materials_count: l.materialsCount,
-          next_quiz_available: l.nextQuizAvailable,
-          content_summary: l.contentSummary ?? '',
-          key_takeaways: l.keyTakeaways ?? [],
-        },
-      ]);
-
-      if (!error) {
-        setLessons((prev) => [l, ...prev]);
-        return;
-      }
+      const { lessonId } = await createLessonWithPdfs(l, pdfFiles, l.packageId);
+      setLessons((prev) => [{ ...l, id: lessonId }, ...prev]);
+      return;
     }
 
     setLessons((prev) => [l, ...prev]);

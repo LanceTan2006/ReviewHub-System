@@ -32,7 +32,7 @@ interface PortalPageProps {
   packages?: ReviewPackage[];
   lessons?: Lesson[];
   transactions?: PaymentTransaction[];
-  onAddLesson?: (l: Lesson) => void;
+  onAddLesson?: (l: Lesson, pdfFiles?: File[]) => void | Promise<void>;
   onAddPackage?: (p: ReviewPackage) => void;
   onUpdatePackage?: (p: ReviewPackage) => void;
   onDeletePackage?: (id: string) => void;

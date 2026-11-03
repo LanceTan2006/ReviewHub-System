@@ -20,6 +20,7 @@ import { AdminDashboard }        from './AdminDashboard';
 // ── Shared UI primitives ───────────────────────────────────────
 import { Card, CardBody, CardHeader } from '../components/Card';
 import { Button }                from '../components/Button';
+import { Modal }                 from '../components/Modal';
 import { ProgressBar }           from '../components/ProgressBar';
 import { sampleEnrolledStudents, reviewPackages, sampleLessons, samplePaymentTransactions } from '../data/mockData';
 
@@ -590,13 +591,65 @@ export const PortalPage: React.FC<PortalPageProps> = ({
 // ── Inline: Proctor Quiz Manager ───────────────────────────────
 const QuizManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }> = ({ onShowToast }) => {
   const [search, setSearch] = useState('');
-  const questions = sampleLessons.map((l, i) => ({
-    id: `q-${i+1}`, subject: l.subject, count: 12 + i * 3,
-    difficulty: i % 3 === 0 ? 'Easy' : i % 3 === 1 ? 'Moderate' : 'Challenging',
-    lastUpdated: 'Oct 2026',
-  }));
-  const filtered = questions.filter((q) => q.subject.toLowerCase().includes(search.toLowerCase()));
-  const diffColor: Record<string, string> = { Easy: 'bg-emerald-50 text-emerald-700 border-emerald-200', Moderate: 'bg-amber-50 text-amber-700 border-amber-200', Challenging: 'bg-red-50 text-red-600 border-red-200' };
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [sets, setSets] = useState([
+    { id: 'q-1', title: 'Foundations Review', subject: 'General Engineering Sciences', count: 18, difficulty: 'Moderate', lastUpdated: 'Nov 03, 2026' },
+    { id: 'q-2', title: 'IEC Reading Drill', subject: 'IELTS Reading', count: 12, difficulty: 'Easy', lastUpdated: 'Nov 01, 2026' },
+    { id: 'q-3', title: 'Ethics Quick Check', subject: 'Professional Practice', count: 15, difficulty: 'Challenging', lastUpdated: 'Oct 28, 2026' },
+  ]);
+  const [draft, setDraft] = useState({ title: '', subject: '', difficulty: 'Moderate', count: '12' });
+
+  const filtered = sets.filter((q) =>
+    q.subject.toLowerCase().includes(search.toLowerCase()) ||
+    q.title.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const diffColor: Record<string, string> = {
+    Easy: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    Moderate: 'bg-amber-50 text-amber-700 border-amber-200',
+    Challenging: 'bg-red-50 text-red-600 border-red-200',
+  };
+
+  const resetDraft = () => {
+    setEditingId(null);
+    setDraft({ title: '', subject: '', difficulty: 'Moderate', count: '12' });
+    setIsModalOpen(false);
+  };
+
+  const openCreate = () => {
+    setEditingId(null);
+    setDraft({ title: '', subject: '', difficulty: 'Moderate', count: '12' });
+    setIsModalOpen(true);
+  };
+
+  const openEdit = (item: typeof sets[number]) => {
+    setEditingId(item.id);
+    setDraft({ title: item.title, subject: item.subject, difficulty: item.difficulty, count: String(item.count) });
+    setIsModalOpen(true);
+  };
+
+  const saveSet = () => {
+    if (!draft.title.trim() || !draft.subject.trim()) {
+      onShowToast('Missing details', 'Please add both the quiz title and subject.', 'error');
+      return;
+    }
+
+    const parsedCount = Number(draft.count || 0);
+    const payload = {
+      id: editingId ?? `q-${Date.now()}`,
+      title: draft.title.trim(),
+      subject: draft.subject.trim(),
+      difficulty: draft.difficulty,
+      count: Number.isFinite(parsedCount) && parsedCount > 0 ? parsedCount : 12,
+      lastUpdated: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+    };
+
+    setSets((prev) => editingId ? prev.map((item) => item.id === editingId ? { ...item, ...payload } : item) : [payload, ...prev]);
+    onShowToast(editingId ? 'Quiz set updated' : 'Quiz set created', editingId ? `Updated ${payload.title}.` : `Created ${payload.title}.`, 'success');
+    resetDraft();
+  };
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12">
       <div className="bg-white p-6 rounded-2xl border border-[#E1EFF7] flex items-center justify-between gap-4">
@@ -606,24 +659,27 @@ const QuizManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }>
           </div>
           <div>
             <h1 className="text-2xl font-extrabold text-[#2C3E50]">Quiz Management</h1>
-            <p className="text-sm text-[#64748B] mt-1">Build and manage question banks per subject domain.</p>
+            <p className="text-sm text-[#64748B] mt-1">Create, edit, and organize question sets for practice quizzes.</p>
           </div>
         </div>
-        <Button variant="primary" size="md" onClick={() => onShowToast('Question Bank', 'Opening question builder...', 'info')}>
+        <Button variant="primary" size="md" onClick={openCreate}>
           <i className="bi bi-plus-lg mr-1.5" aria-hidden="true" />Add Question Set
         </Button>
       </div>
+
       <div className="relative max-w-md">
         <i className="bi bi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-[#94A3B8]" aria-hidden="true" />
-        <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by subject…"
+        <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by subject or title…"
           className="w-full pl-10 pr-4 py-2 text-sm rounded-xl border border-[#D6ECFA] focus:outline-none focus:ring-2 focus:ring-[#3498DB] bg-white" />
       </div>
+
       <Card className="border-[#E1EFF7]">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-[#F4FAFD] border-b border-[#E1EFF7] text-[11px] font-bold text-[#64748B] uppercase tracking-wider">
-                <th className="py-3 px-5">Subject Domain</th>
+                <th className="py-3 px-5">Title</th>
+                <th className="py-3 px-5">Subject</th>
                 <th className="py-3 px-5">Questions</th>
                 <th className="py-3 px-5">Difficulty</th>
                 <th className="py-3 px-5">Last Updated</th>
@@ -633,14 +689,15 @@ const QuizManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }>
             <tbody className="divide-y divide-[#F0F6FA]">
               {filtered.map((q) => (
                 <tr key={q.id} className="hover:bg-[#FAFDFE]">
-                  <td className="py-3.5 px-5 font-semibold text-[#2C3E50]">{q.subject}</td>
+                  <td className="py-3.5 px-5 font-semibold text-[#2C3E50]">{q.title}</td>
+                  <td className="py-3.5 px-5 text-[#2C3E50]">{q.subject}</td>
                   <td className="py-3.5 px-5 font-mono text-[#2C3E50]">{q.count} items</td>
                   <td className="py-3.5 px-5">
                     <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${diffColor[q.difficulty]}`}>{q.difficulty}</span>
                   </td>
                   <td className="py-3.5 px-5 text-[#64748B]">{q.lastUpdated}</td>
                   <td className="py-3.5 px-5 text-right">
-                    <Button variant="secondary" size="sm" onClick={() => onShowToast('Edit Questions', `Opening ${q.subject} question bank`, 'info')}>
+                    <Button variant="secondary" size="sm" onClick={() => openEdit(q)}>
                       <i className="bi bi-pencil mr-1" aria-hidden="true" />Edit
                     </Button>
                   </td>
@@ -650,22 +707,101 @@ const QuizManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }>
           </table>
         </div>
       </Card>
+
+      <Modal isOpen={isModalOpen} onClose={resetDraft} title={editingId ? 'Edit Question Set' : 'Create Question Set'} subtitle="Create or update a quiz question bank for a subject area." maxWidth="md">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-[#2C3E50] uppercase tracking-wider mb-2">Quiz title</label>
+            <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-[#D6ECFA] bg-white text-sm text-[#2C3E50] focus:outline-none focus:ring-2 focus:ring-[#3498DB]" placeholder="e.g. Foundations Review" />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-[#2C3E50] uppercase tracking-wider mb-2">Subject</label>
+            <input value={draft.subject} onChange={(e) => setDraft({ ...draft, subject: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-[#D6ECFA] bg-white text-sm text-[#2C3E50] focus:outline-none focus:ring-2 focus:ring-[#3498DB]" placeholder="e.g. General Engineering Sciences" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-[#2C3E50] uppercase tracking-wider mb-2">Difficulty</label>
+              <select value={draft.difficulty} onChange={(e) => setDraft({ ...draft, difficulty: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-[#D6ECFA] bg-white text-sm text-[#2C3E50] focus:outline-none focus:ring-2 focus:ring-[#3498DB]">
+                <option value="Easy">Easy</option>
+                <option value="Moderate">Moderate</option>
+                <option value="Challenging">Challenging</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-[#2C3E50] uppercase tracking-wider mb-2">Question count</label>
+              <input type="number" min={1} value={draft.count} onChange={(e) => setDraft({ ...draft, count: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-[#D6ECFA] bg-white text-sm text-[#2C3E50] focus:outline-none focus:ring-2 focus:ring-[#3498DB]" />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-3">
+          <Button variant="secondary" size="md" onClick={resetDraft}>Cancel</Button>
+          <Button variant="primary" size="md" onClick={saveSet}>{editingId ? 'Update Quiz Set' : 'Save Quiz Set'}</Button>
+        </div>
+      </Modal>
     </div>
   );
 };
 
 // ── Inline: Proctor Mock Exam Manager ─────────────────────────
 const MockExamManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }> = ({ onShowToast }) => {
-  const exams = [
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [exams, setExams] = useState([
     { id: 'ex-1', title: 'Diagnostic Mock Exam 1', date: 'Nov 2, 2026', duration: '4 hours', takers: 248, avg: '78.4%', status: 'Scheduled' },
-    { id: 'ex-2', title: 'Diagnostic Mock Exam 2', date: 'Nov 9, 2026', duration: '4 hours', takers: 0,   avg: '—',     status: 'Draft' },
-    { id: 'ex-3', title: 'Full PRC Simulation',    date: 'Oct 18, 2026', duration: '5 hours', takers: 231, avg: '82.1%', status: 'Completed' },
-  ];
+    { id: 'ex-2', title: 'Diagnostic Mock Exam 2', date: 'Nov 9, 2026', duration: '4 hours', takers: 0, avg: '—', status: 'Draft' },
+    { id: 'ex-3', title: 'Full PRC Simulation', date: 'Oct 18, 2026', duration: '5 hours', takers: 231, avg: '82.1%', status: 'Completed' },
+  ]);
+  const [draft, setDraft] = useState({ title: '', date: '', duration: '4 hours', takers: '0', avg: '—', status: 'Draft' });
+
   const statusColors: Record<string, string> = {
     Scheduled: 'bg-blue-50 text-blue-700 border-blue-200',
-    Draft:     'bg-gray-50 text-gray-600 border-gray-200',
+    Draft: 'bg-gray-50 text-gray-600 border-gray-200',
     Completed: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   };
+
+  const resetDraft = () => {
+    setEditingId(null);
+    setDraft({ title: '', date: '', duration: '4 hours', takers: '0', avg: '—', status: 'Draft' });
+    setIsModalOpen(false);
+  };
+
+  const openCreate = () => {
+    setEditingId(null);
+    setDraft({ title: '', date: '', duration: '4 hours', takers: '0', avg: '—', status: 'Draft' });
+    setIsModalOpen(true);
+  };
+
+  const openEdit = (exam: typeof exams[number]) => {
+    setEditingId(exam.id);
+    setDraft({ title: exam.title, date: exam.date, duration: exam.duration, takers: String(exam.takers), avg: exam.avg, status: exam.status });
+    setIsModalOpen(true);
+  };
+
+  const saveExam = () => {
+    if (!draft.title.trim() || !draft.date.trim()) {
+      onShowToast('Missing exam details', 'Please add the exam title and date.', 'error');
+      return;
+    }
+
+    const payload = {
+      id: editingId ?? `ex-${Date.now()}`,
+      title: draft.title.trim(),
+      date: draft.date.trim(),
+      duration: draft.duration,
+      takers: Number(draft.takers) || 0,
+      avg: draft.avg.trim() || '—',
+      status: draft.status,
+    };
+
+    setExams((prev) => editingId ? prev.map((item) => item.id === editingId ? { ...item, ...payload } : item) : [payload, ...prev]);
+    onShowToast(editingId ? 'Mock exam updated' : 'Mock exam created', editingId ? `Updated ${payload.title}.` : `Created ${payload.title}.`, 'success');
+    resetDraft();
+  };
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12">
       <div className="bg-white p-6 rounded-2xl border border-[#E1EFF7] flex items-center justify-between gap-4">
@@ -678,7 +814,7 @@ const MockExamManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'
             <p className="text-sm text-[#64748B] mt-1">Schedule, configure, and review full-length mock examinations.</p>
           </div>
         </div>
-        <Button variant="primary" size="md" onClick={() => onShowToast('New Exam', 'Opening exam builder...', 'info')}>
+        <Button variant="primary" size="md" onClick={openCreate}>
           <i className="bi bi-plus-lg mr-1.5" aria-hidden="true" />Create Mock Exam
         </Button>
       </div>
@@ -695,14 +831,58 @@ const MockExamManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'
                 <div><i className="bi bi-calendar3 mr-1" aria-hidden="true" />{e.date}</div>
                 <div><i className="bi bi-people mr-1" aria-hidden="true" />{e.takers} takers · Avg: {e.avg}</div>
               </div>
-              <Button variant="secondary" size="sm" className="w-full justify-center"
-                onClick={() => onShowToast('Exam Details', `Opening ${e.title}`, 'info')}>
+              <Button variant="secondary" size="sm" className="w-full justify-center" onClick={() => openEdit(e)}>
                 {e.status === 'Completed' ? 'View Results' : 'Edit Exam'}
               </Button>
             </CardBody>
           </Card>
         ))}
       </div>
+
+      <Modal isOpen={isModalOpen} onClose={resetDraft} title={editingId ? 'Edit Mock Exam' : 'Create Mock Exam'} subtitle="Set the scheduled exam date, time, and status." maxWidth="md">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-[#2C3E50] uppercase tracking-wider mb-2">Exam title</label>
+            <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-[#D6ECFA] bg-white text-sm text-[#2C3E50] focus:outline-none focus:ring-2 focus:ring-[#3498DB]" placeholder="e.g. Diagnostic Mock Exam 3" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-[#2C3E50] uppercase tracking-wider mb-2">Date</label>
+              <input type="text" value={draft.date} onChange={(e) => setDraft({ ...draft, date: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-[#D6ECFA] bg-white text-sm text-[#2C3E50] focus:outline-none focus:ring-2 focus:ring-[#3498DB]" placeholder="Nov 16, 2026" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-[#2C3E50] uppercase tracking-wider mb-2">Duration</label>
+              <input value={draft.duration} onChange={(e) => setDraft({ ...draft, duration: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-[#D6ECFA] bg-white text-sm text-[#2C3E50] focus:outline-none focus:ring-2 focus:ring-[#3498DB]" placeholder="4 hours" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-[#2C3E50] uppercase tracking-wider mb-2">Takers</label>
+              <input type="number" min={0} value={draft.takers} onChange={(e) => setDraft({ ...draft, takers: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-[#D6ECFA] bg-white text-sm text-[#2C3E50] focus:outline-none focus:ring-2 focus:ring-[#3498DB]" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-[#2C3E50] uppercase tracking-wider mb-2">Average score</label>
+              <input value={draft.avg} onChange={(e) => setDraft({ ...draft, avg: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-[#D6ECFA] bg-white text-sm text-[#2C3E50] focus:outline-none focus:ring-2 focus:ring-[#3498DB]" placeholder="82.1%" />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-[#2C3E50] uppercase tracking-wider mb-2">Status</label>
+            <select value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-[#D6ECFA] bg-white text-sm text-[#2C3E50] focus:outline-none focus:ring-2 focus:ring-[#3498DB]">
+              <option value="Draft">Draft</option>
+              <option value="Scheduled">Scheduled</option>
+              <option value="Completed">Completed</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-3">
+          <Button variant="secondary" size="md" onClick={resetDraft}>Cancel</Button>
+          <Button variant="primary" size="md" onClick={saveExam}>{editingId ? 'Update Mock Exam' : 'Save Mock Exam'}</Button>
+        </div>
+      </Modal>
     </div>
   );
 };

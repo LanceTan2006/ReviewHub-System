@@ -1,4 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { fetchReviewPackages } from '../lib/services/packagesLessons';
+import { createPaymentTransaction } from '../lib/services/payments';
+import { supabase } from '../lib/supabase';
 import { ActivePage, ReviewPackage, UserRole, PaymentTransaction } from '../types';
 import { Card, CardBody, CardHeader } from '../components/Card';
 import { Button } from '../components/Button';
@@ -83,6 +86,19 @@ export const StudentEnrollmentPage: React.FC<StudentEnrollmentPageProps> = ({
   );
   const [payingEnrollmentId, setPayingEnrollmentId] = useState<string | null>(null);
   const [enrollments, setEnrollments] = useState(MOCK_ENROLLMENTS);
+  const [loadedPackages, setLoadedPackages] = useState<ReviewPackage[]>(packages ?? []);
+
+  useEffect(() => {
+    if (packages && packages.length > 0) {
+      setLoadedPackages(packages);
+      return;
+    }
+    fetchReviewPackages().then((pkgs) => {
+      setLoadedPackages(pkgs);
+    });
+  }, [packages]);
+
+  const activePackages = loadedPackages.length > 0 ? loadedPackages : packages;
 
   // ── Wizard step state ──────────────────────────────────────
   // Step: 1 = Student Account, 2 = Package Selection, 3 = Payment & Checkout, 4 = Confirmation

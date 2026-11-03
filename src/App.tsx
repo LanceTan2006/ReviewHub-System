@@ -28,6 +28,7 @@ import { Menu, X } from 'lucide-react';
 import { logoutFromFirebase } from './lib/firebase';
 import { hydrateSupabaseSession } from './lib/hybridAuth';
 import { createLessonWithPdfs } from './lib/lessonMaterials';
+import { loadSiteData } from './lib/siteData';
 import logoImg from './assets/images/reviewhub_logo.png';
 
 // ── Role colour / icon map for the portal header badge ─────────
@@ -68,6 +69,14 @@ export default function App() {
     };
 
     loadSupabaseSession();
+
+    loadSiteData().then((siteData) => {
+      if (isMounted) {
+        setPackages(siteData.packages);
+        setLessons(siteData.lessons);
+        setTransactions(siteData.transactions);
+      }
+    });
 
     return () => {
       isMounted = false;

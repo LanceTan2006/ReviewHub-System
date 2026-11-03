@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { ActivePage, ReviewPackage } from '../types';
-import { reviewPackages } from '../data/mockData';
-import { Card, CardBody, CardHeader } from '../components/Card';
+import { Card, CardBody } from '../components/Card';
 import { Button } from '../components/Button';
-import { Package, Check, ArrowRight, ShieldCheck, Sparkles } from 'lucide-react';
+import { Check, ShieldCheck, Sparkles } from 'lucide-react';
+import { fetchReviewPackages } from '../lib/services/packagesLessons';
 
 interface PackagesPageProps {
   onNavigate: (page: ActivePage) => void;
@@ -16,7 +16,28 @@ export const PackagesPage: React.FC<PackagesPageProps> = ({
   onShowToast,
   packages: propPackages,
 }) => {
-  const displayPackages = propPackages || reviewPackages;
+  const [packagesList, setPackagesList] = useState<ReviewPackage[]>(propPackages ?? []);
+
+  useEffect(() => {
+    if (propPackages && propPackages.length > 0) {
+      setPackagesList(propPackages);
+      return;
+    }
+
+    let isMounted = true;
+    fetchReviewPackages().then((pkgs) => {
+      if (isMounted) {
+        setPackagesList(pkgs);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [propPackages]);
+
+  const displayPackages = packagesList;
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* Current Active Enrolled Package Banner */}
@@ -62,7 +83,7 @@ export const PackagesPage: React.FC<PackagesPageProps> = ({
             <Card
               key={pkg.id}
               className={`flex flex-col justify-between ${
-                pkg.id === 'pkg-board-comprehensive'
+                pkg.id === 'pkg-board-comprehensive' || pkg.id === 'prc-licensure-comprehensive'
                   ? 'border-[#3498DB] ring-2 ring-[#3498DB]/15'
                   : 'border-[#E1EFF7]'
               }`}
@@ -95,7 +116,7 @@ export const PackagesPage: React.FC<PackagesPageProps> = ({
                 </div>
 
                 <Button
-                  variant={pkg.id === 'pkg-board-comprehensive' ? 'secondary' : 'primary'}
+                  variant={pkg.id === 'pkg-board-comprehensive' || pkg.id === 'prc-licensure-comprehensive' ? 'secondary' : 'primary'}
                   size="md"
                   onClick={() => {
                     onShowToast('Package Selected', `Switched review syllabus to ${pkg.title}`, 'success');
@@ -103,7 +124,7 @@ export const PackagesPage: React.FC<PackagesPageProps> = ({
                   }}
                   className="w-full justify-center"
                 >
-                  {pkg.id === 'pkg-board-comprehensive' ? 'Current Package' : 'Switch to this Program'}
+                  {pkg.id === 'pkg-board-comprehensive' || pkg.id === 'prc-licensure-comprehensive' ? 'Current Package' : 'Switch to this Program'}
                 </Button>
               </CardBody>
             </Card>

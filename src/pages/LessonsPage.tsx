@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ActivePage, Lesson } from '../types';
-import { sampleLessons } from '../data/mockData';
-import { Card, CardBody, CardHeader } from '../components/Card';
+import { Card, CardBody } from '../components/Card';
 import { Button } from '../components/Button';
 import { ProgressBar } from '../components/ProgressBar';
 import {
@@ -9,13 +8,10 @@ import {
   Play,
   CheckCircle2,
   Clock,
-  FileText,
   Search,
-  Filter,
-  Download,
   Sparkles,
-  ChevronRight
 } from 'lucide-react';
+import { fetchLessons } from '../lib/services/packagesLessons';
 
 interface LessonsPageProps {
   onNavigate: (page: ActivePage) => void;
@@ -26,11 +22,24 @@ export const LessonsPage: React.FC<LessonsPageProps> = ({
   onNavigate,
   onShowToast,
 }) => {
-  const [lessons] = useState<Lesson[]>(sampleLessons);
+  const [lessons, setLessons] = useState<Lesson[]>([]);
   const [search, setSearch] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('All');
 
-  const subjects = ['All', 'General Engineering Sciences', 'Professional Ethics & Law', 'Applied Physical Sciences', 'Applied Mathematics', 'Chemical Sciences'];
+  useEffect(() => {
+    let isMounted = true;
+    fetchLessons().then((data) => {
+      if (isMounted) {
+        setLessons(data);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const subjects = ['All', 'General Engineering Sciences', 'Professional Ethics & Law', 'Applied Physical Sciences', 'Applied Mathematics', 'Civil Service Review'];
 
   const filtered = lessons.filter((l) => {
     const matchesSearch = l.title.toLowerCase().includes(search.toLowerCase()) || l.instructor.toLowerCase().includes(search.toLowerCase());

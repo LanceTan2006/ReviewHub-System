@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { ActivePage } from '../types';
-import { Card, CardBody, CardHeader } from '../components/Card';
+import { Card, CardBody } from '../components/Card';
 import { Button } from '../components/Button';
-import { Award, Download, CheckCircle2, Calendar } from 'lucide-react';
+import { Award, Download, CheckCircle2 } from 'lucide-react';
+import { fetchCertificates } from '../lib/services/packagesLessons';
 
 interface CertificatesPageProps {
   onNavigate: (page: ActivePage) => void;
@@ -13,7 +14,26 @@ export const CertificatesPage: React.FC<CertificatesPageProps> = ({
   onNavigate,
   onShowToast,
 }) => {
-  const certs = [
+  const [certsList, setCertsList] = useState<any[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchCertificates().then((data) => {
+      if (isMounted && data.length > 0) {
+        setCertsList(data.map((c: any) => ({
+          id: c.id,
+          title: c.review_packages?.title || 'Course Completion Certificate',
+          issuedDate: new Date(c.issue_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+          credentialId: c.certificate_code,
+          hours: 'Accredited Curriculum',
+          status: c.status === 'issued' ? 'Verified' : c.status,
+        })));
+      }
+    });
+    return () => { isMounted = false; };
+  }, []);
+
+  const defaultCerts = [
     {
       id: 'cert-1',
       title: 'Thermodynamics & Energy Systems Mastery',
@@ -31,6 +51,8 @@ export const CertificatesPage: React.FC<CertificatesPageProps> = ({
       status: 'Verified',
     },
   ];
+
+  const certs = certsList.length > 0 ? certsList : defaultCerts;
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">

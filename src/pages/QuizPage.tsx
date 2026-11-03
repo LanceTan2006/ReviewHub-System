@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { ActivePage, QuizQuestion } from '../types';
 import { sampleQuizQuestions, sampleIeltsQuestions, getIeltsBandScore } from '../data/mockData';
+import { fetchQuizQuestions, recordQuizAttempt } from '../lib/services/quizzes';
+import { fetchMockExams, fetchMockExamQuestions } from '../lib/services/mockExams';
+import { supabase } from '../lib/supabase';
 import { Card, CardBody, CardHeader } from '../components/Card';
 import { Button } from '../components/Button';
 import { ProgressBar } from '../components/ProgressBar';

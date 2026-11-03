@@ -17,6 +17,7 @@ import { ProgressPage }          from './ProgressPage';
 import { CertificatesPage }      from './CertificatesPage';
 import { StudentEnrollmentPage } from './StudentEnrollmentPage';
 import { AdminDashboard }        from './AdminDashboard';
+import { fetchAnnouncements }    from '../lib/services/announcements';
 
 // ── Shared UI primitives ───────────────────────────────────────
 import { Card, CardBody, CardHeader } from '../components/Card';

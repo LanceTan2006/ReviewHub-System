@@ -5,7 +5,7 @@
  * Abstraction rule: permission strings are never shown to the user.
  * The 403 screen shows a plain "Contact your Manager" message only.
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ActivePage, ReviewPackage, Lesson, PaymentTransaction } from '../types';
 import { AuthUser, hasPermission, PAGE_PERMISSIONS } from '../rbac';
 
@@ -18,6 +18,15 @@ import { CertificatesPage }      from './CertificatesPage';
 import { StudentEnrollmentPage } from './StudentEnrollmentPage';
 import { AdminDashboard }        from './AdminDashboard';
 import { fetchAnnouncements }    from '../lib/services/announcements';
+import {
+  fetchQuizSets,
+  createQuizSet,
+  updateQuizSet,
+  fetchQuizQuestions,
+  createQuizQuestion,
+  deleteQuizQuestion,
+  type QuizSet,
+} from '../lib/services/quizzes';
 
 // ── Shared UI primitives ───────────────────────────────────────
 import { Card, CardBody, CardHeader } from '../components/Card';
@@ -634,21 +643,67 @@ export const PortalPage: React.FC<PortalPageProps> = ({
 // ── Inline: Proctor Quiz Manager ───────────────────────────────
 const QuizManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }> = ({ onShowToast }) => {
   type QuestionEntry = {
-    id: string;
+    id: string;          // Supabase UUID once saved, temp string before
     prompt: string;
     options: string[];
-    correctAnswer: string;
+    correctAnswer: string; // 'A'|'B'|'C'|'D'
     explanation: string;
+    isSaved: boolean;    // true once persisted to Supabase
   };
 
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [sets, setSets] = useState<Array<{ id: string; title: string; subject: string; count: number; difficulty: string; lastUpdated: string }>>([]);
-  const [draft, setDraft] = useState({ title: '', subject: '', difficulty: 'Moderate', count: '12' });
+  const [draft, setDraft] = useState({ title: '', subject: '', difficulty: 'Moderate' });
   const [questionBuilderSetId, setQuestionBuilderSetId] = useState<string | null>(null);
   const [questionForm, setQuestionForm] = useState({ prompt: '', optionA: '', optionB: '', optionC: '', optionD: '', correctAnswer: 'A', explanation: '' });
   const [questionsBySet, setQuestionsBySet] = useState<Record<string, QuestionEntry[]>>({});
+
+  // ── Load existing quiz sets from Supabase on mount ──────────
+  useEffect(() => {
+    let isMounted = true;
+    fetchQuizSets().then((data) => {
+      if (!isMounted) return;
+      setSets(data.map((s) => ({
+        id: s.id,
+        title: s.title,
+        subject: s.subject,
+        difficulty: s.difficulty,
+        // use whichever counter the DB actually tracks
+        count: Math.max(s.item_count ?? 0, s.total_questions ?? 0),
+        lastUpdated: s.created_at
+          ? new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+          : '—',
+      })));
+      setLoading(false);
+    }).catch(() => setLoading(false));
+    return () => { isMounted = false; };
+  }, []);
+
+  // ── Load questions for a set when the builder opens ─────────
+  useEffect(() => {
+    if (!questionBuilderSetId) return;
+    // Only fetch if we don't have them cached yet
+    if (questionsBySet[questionBuilderSetId]) return;
+
+    fetchQuizQuestions(questionBuilderSetId).then((qs) => {
+      setQuestionsBySet((prev) => ({
+        ...prev,
+        [questionBuilderSetId]: qs.map((q) => ({
+          id: String(q.id),
+          prompt: q.question,
+          options: q.options,
+          correctAnswer: String.fromCharCode(65 + q.correctIndex),
+          explanation: q.explanation,
+          isSaved: true,
+        })),
+      }));
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questionBuilderSetId]);
 
   const filtered = sets.filter((q) =>
     q.subject.toLowerCase().includes(search.toLowerCase()) ||
@@ -667,19 +722,19 @@ const QuizManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }>
 
   const resetDraft = () => {
     setEditingId(null);
-    setDraft({ title: '', subject: '', difficulty: 'Moderate', count: '12' });
+    setDraft({ title: '', subject: '', difficulty: 'Moderate' });
     setIsModalOpen(false);
   };
 
   const openCreate = () => {
     setEditingId(null);
-    setDraft({ title: '', subject: '', difficulty: 'Moderate', count: '12' });
+    setDraft({ title: '', subject: '', difficulty: 'Moderate' });
     setIsModalOpen(true);
   };
 
   const openEdit = (item: typeof sets[number]) => {
     setEditingId(item.id);
-    setDraft({ title: item.title, subject: item.subject, difficulty: item.difficulty, count: String(item.count) });
+    setDraft({ title: item.title, subject: item.subject, difficulty: item.difficulty });
     setIsModalOpen(true);
   };
 
@@ -688,54 +743,130 @@ const QuizManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }>
     resetQuestionForm();
   };
 
-  const saveSet = () => {
+  // ── Save quiz set (create OR update) → Supabase ─────────────
+  const saveSet = async () => {
     if (!draft.title.trim() || !draft.subject.trim()) {
       onShowToast('Missing details', 'Please add both the quiz title and subject.', 'error');
       return;
     }
-
-    const parsedCount = Number(draft.count || 0);
-    const payload = {
-      id: editingId ?? `q-${Date.now()}`,
-      title: draft.title.trim(),
-      subject: draft.subject.trim(),
-      difficulty: draft.difficulty,
-      count: Number.isFinite(parsedCount) && parsedCount > 0 ? parsedCount : 12,
-      lastUpdated: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-    };
-
-    setSets((prev) => editingId ? prev.map((item) => item.id === editingId ? { ...item, ...payload } : item) : [payload, ...prev]);
-    if (!editingId) {
-      setQuestionsBySet((prev) => ({ ...prev, [payload.id]: [] }));
+    setSaving(true);
+    try {
+      if (editingId) {
+        // UPDATE
+        const ok = await updateQuizSet(editingId, {
+          title: draft.title.trim(),
+          subject: draft.subject.trim(),
+          difficulty: draft.difficulty,
+        });
+        if (ok) {
+          setSets((prev) => prev.map((item) =>
+            item.id === editingId
+              ? { ...item, title: draft.title.trim(), subject: draft.subject.trim(), difficulty: draft.difficulty }
+              : item
+          ));
+          onShowToast('Quiz set updated', `"${draft.title.trim()}" saved to Supabase.`, 'success');
+        } else {
+          onShowToast('Update failed', 'Could not update the quiz set. Check Supabase permissions.', 'error');
+        }
+      } else {
+        // CREATE
+        const created = await createQuizSet({
+          title: draft.title.trim(),
+          subject: draft.subject.trim(),
+          difficulty: draft.difficulty,
+        });
+        if (created) {
+          setSets((prev) => [{
+            id: created.id,
+            title: created.title,
+            subject: created.subject,
+            difficulty: created.difficulty,
+            count: 0,
+            lastUpdated: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+          }, ...prev]);
+          setQuestionsBySet((prev) => ({ ...prev, [created.id]: [] }));
+          onShowToast('Quiz set created', `"${created.title}" is live in Supabase. Add questions now.`, 'success');
+        } else {
+          onShowToast('Create failed', 'Could not create the quiz set. Check Supabase permissions.', 'error');
+        }
+      }
+    } finally {
+      setSaving(false);
+      resetDraft();
     }
-    onShowToast(editingId ? 'Quiz set updated' : 'Quiz set created', editingId ? `Updated ${payload.title}.` : `Created ${payload.title}.`, 'success');
-    resetDraft();
   };
 
-  const addQuestionToSet = () => {
+  // ── Add a question to a set → Supabase ──────────────────────
+  const addQuestionToSet = async () => {
     if (!questionBuilderSetId) return;
     if (!questionForm.prompt.trim() || !questionForm.optionA.trim() || !questionForm.optionB.trim() || !questionForm.optionC.trim() || !questionForm.optionD.trim()) {
       onShowToast('Question incomplete', 'Please fill in the question prompt and all four options.', 'error');
       return;
     }
 
-    const newQuestion: QuestionEntry = {
-      id: `q-${Date.now()}`,
-      prompt: questionForm.prompt.trim(),
-      options: [questionForm.optionA.trim(), questionForm.optionB.trim(), questionForm.optionC.trim(), questionForm.optionD.trim()],
-      correctAnswer: questionForm.correctAnswer,
-      explanation: questionForm.explanation.trim(),
-    };
+    const options = [
+      questionForm.optionA.trim(),
+      questionForm.optionB.trim(),
+      questionForm.optionC.trim(),
+      questionForm.optionD.trim(),
+    ];
+    const correctIndex = questionForm.correctAnswer.charCodeAt(0) - 65; // A→0, B→1, …
+    const builderSet = sets.find((s) => s.id === questionBuilderSetId);
 
-    setQuestionsBySet((prev) => ({
-      ...prev,
-      [questionBuilderSetId]: [...(prev[questionBuilderSetId] ?? []), newQuestion],
-    }));
+    setSaving(true);
+    try {
+      const newId = await createQuizQuestion({
+        setId: questionBuilderSetId,
+        subject: builderSet?.subject ?? 'General',
+        difficulty: builderSet?.difficulty ?? 'Moderate',
+        question: questionForm.prompt.trim(),
+        options,
+        correctIndex,
+        explanation: questionForm.explanation.trim(),
+      });
 
-    setSets((prev) => prev.map((item) => item.id === questionBuilderSetId ? { ...item, count: (prev.find((entry) => entry.id === questionBuilderSetId)?.count ?? 0) + 1, lastUpdated: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) } : item));
+      if (newId) {
+        const entry: QuestionEntry = {
+          id: newId,
+          prompt: questionForm.prompt.trim(),
+          options,
+          correctAnswer: questionForm.correctAnswer,
+          explanation: questionForm.explanation.trim(),
+          isSaved: true,
+        };
+        setQuestionsBySet((prev) => ({
+          ...prev,
+          [questionBuilderSetId]: [...(prev[questionBuilderSetId] ?? []), entry],
+        }));
+        // Bump local count
+        setSets((prev) => prev.map((item) =>
+          item.id === questionBuilderSetId
+            ? { ...item, count: item.count + 1 }
+            : item
+        ));
+        resetQuestionForm();
+        onShowToast('Question saved', 'The question is now live in Supabase for students.', 'success');
+      } else {
+        onShowToast('Save failed', 'Could not save the question. Check Supabase permissions.', 'error');
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
 
-    resetQuestionForm();
-    onShowToast('Question added', 'The question has been added to this quiz set.', 'success');
+  // ── Delete a question from a set ────────────────────────────
+  const removeQuestion = async (setId: string, questionId: string) => {
+    const ok = await deleteQuizQuestion(questionId);
+    if (ok) {
+      setQuestionsBySet((prev) => ({
+        ...prev,
+        [setId]: (prev[setId] ?? []).filter((q) => q.id !== questionId),
+      }));
+      setSets((prev) => prev.map((item) =>
+        item.id === setId ? { ...item, count: Math.max(0, item.count - 1) } : item
+      ));
+      onShowToast('Question deleted', 'Removed from Supabase.', 'info');
+    }
   };
 
   const builderSet = sets.find((set) => set.id === questionBuilderSetId);
@@ -743,6 +874,7 @@ const QuizManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }>
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12">
+      {/* Header */}
       <div className="bg-white p-6 rounded-2xl border border-[#E1EFF7] flex items-center justify-between gap-4">
         <div className="flex items-start gap-4">
           <div className="w-12 h-12 rounded-2xl bg-[#D6ECFA] flex items-center justify-center shrink-0">
@@ -750,7 +882,7 @@ const QuizManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }>
           </div>
           <div>
             <h1 className="text-2xl font-extrabold text-[#2C3E50]">Quiz Management</h1>
-            <p className="text-sm text-[#64748B] mt-1">Create quiz sets and input the actual questions used by the quiz.</p>
+            <p className="text-sm text-[#64748B] mt-1">Questions saved here are immediately visible to students in the Practice Quiz.</p>
           </div>
         </div>
         <Button variant="primary" size="md" onClick={openCreate}>
@@ -758,20 +890,27 @@ const QuizManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }>
         </Button>
       </div>
 
+      {/* Search */}
       <div className="relative max-w-md">
         <i className="bi bi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-[#94A3B8]" aria-hidden="true" />
         <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by subject or title…"
           className="w-full pl-10 pr-4 py-2 text-sm rounded-xl border border-[#D6ECFA] focus:outline-none focus:ring-2 focus:ring-[#3498DB] bg-white" />
       </div>
 
-      {filtered.length === 0 ? (
+      {/* Loading skeleton */}
+      {loading ? (
+        <div className="flex items-center justify-center py-16 gap-3 text-[#64748B] text-sm">
+          <div className="w-5 h-5 border-2 border-[#3498DB] border-t-transparent rounded-full animate-spin" />
+          Loading quiz sets from Supabase…
+        </div>
+      ) : filtered.length === 0 ? (
         <Card className="border-dashed border-[#D6ECFA] bg-[#F9FCFF]">
           <CardBody className="p-10 text-center">
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#D6ECFA] text-[#3498DB] text-2xl">
               <i className="bi bi-question-circle" aria-hidden="true" />
             </div>
             <h3 className="text-lg font-bold text-[#2C3E50]">No quiz sets yet</h3>
-            <p className="mt-2 text-sm text-[#64748B]">Create a quiz set and add individual questions to build the quiz content.</p>
+            <p className="mt-2 text-sm text-[#64748B]">Create a quiz set, add questions, and students will see them immediately.</p>
             <div className="mt-5 flex justify-center">
               <Button variant="primary" size="md" onClick={openCreate}>Create Quiz Set</Button>
             </div>
@@ -787,7 +926,7 @@ const QuizManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }>
                   <th className="py-3 px-5">Subject</th>
                   <th className="py-3 px-5">Questions</th>
                   <th className="py-3 px-5">Difficulty</th>
-                  <th className="py-3 px-5">Last Updated</th>
+                  <th className="py-3 px-5">Created</th>
                   <th className="py-3 px-5 text-right">Actions</th>
                 </tr>
               </thead>
@@ -796,7 +935,11 @@ const QuizManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }>
                   <tr key={q.id} className="hover:bg-[#FAFDFE]">
                     <td className="py-3.5 px-5 font-semibold text-[#2C3E50]">{q.title}</td>
                     <td className="py-3.5 px-5 text-[#2C3E50]">{q.subject}</td>
-                    <td className="py-3.5 px-5 font-mono text-[#2C3E50]">{q.count} items</td>
+                    <td className="py-3.5 px-5">
+                      <span className={`font-mono font-bold ${q.count === 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                        {q.count} {q.count === 0 ? '⚠ no questions' : `item${q.count !== 1 ? 's' : ''}`}
+                      </span>
+                    </td>
                     <td className="py-3.5 px-5">
                       <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${diffColor[q.difficulty]}`}>{q.difficulty}</span>
                     </td>
@@ -806,7 +949,7 @@ const QuizManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }>
                         <Button variant="secondary" size="sm" onClick={() => openEdit(q)}>
                           <i className="bi bi-pencil mr-1" aria-hidden="true" />Edit
                         </Button>
-                        <Button variant="outline" size="sm" onClick={() => openQuestionBuilder(q.id)}>
+                        <Button variant="primary" size="sm" onClick={() => openQuestionBuilder(q.id)}>
                           <i className="bi bi-plus-circle mr-1" aria-hidden="true" />Questions
                         </Button>
                       </div>
@@ -819,44 +962,49 @@ const QuizManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }>
         </Card>
       )}
 
-      <Modal isOpen={isModalOpen} onClose={resetDraft} title={editingId ? 'Edit Question Set' : 'Create Question Set'} subtitle="Create or update a quiz question bank for a subject area." maxWidth="md">
+      {/* ── Create / Edit quiz set modal ── */}
+      <Modal isOpen={isModalOpen} onClose={resetDraft} title={editingId ? 'Edit Question Set' : 'Create Question Set'} subtitle="Saved sets are immediately visible to students." maxWidth="md">
         <div className="space-y-4">
           <div>
             <label className="block text-xs font-bold text-[#2C3E50] uppercase tracking-wider mb-2">Quiz title</label>
             <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-[#D6ECFA] bg-white text-sm text-[#2C3E50] focus:outline-none focus:ring-2 focus:ring-[#3498DB]" placeholder="e.g. Foundations Review" />
           </div>
-
           <div>
             <label className="block text-xs font-bold text-[#2C3E50] uppercase tracking-wider mb-2">Subject</label>
             <input value={draft.subject} onChange={(e) => setDraft({ ...draft, subject: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-[#D6ECFA] bg-white text-sm text-[#2C3E50] focus:outline-none focus:ring-2 focus:ring-[#3498DB]" placeholder="e.g. General Engineering Sciences" />
           </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-[#2C3E50] uppercase tracking-wider mb-2">Difficulty</label>
-              <select value={draft.difficulty} onChange={(e) => setDraft({ ...draft, difficulty: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-[#D6ECFA] bg-white text-sm text-[#2C3E50] focus:outline-none focus:ring-2 focus:ring-[#3498DB]">
-                <option value="Easy">Easy</option>
-                <option value="Moderate">Moderate</option>
-                <option value="Challenging">Challenging</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-[#2C3E50] uppercase tracking-wider mb-2">Question count</label>
-              <input type="number" min={1} value={draft.count} onChange={(e) => setDraft({ ...draft, count: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-[#D6ECFA] bg-white text-sm text-[#2C3E50] focus:outline-none focus:ring-2 focus:ring-[#3498DB]" />
-            </div>
+          <div>
+            <label className="block text-xs font-bold text-[#2C3E50] uppercase tracking-wider mb-2">Difficulty</label>
+            <select value={draft.difficulty} onChange={(e) => setDraft({ ...draft, difficulty: e.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-[#D6ECFA] bg-white text-sm text-[#2C3E50] focus:outline-none focus:ring-2 focus:ring-[#3498DB]">
+              <option value="Easy">Easy</option>
+              <option value="Moderate">Moderate</option>
+              <option value="Challenging">Challenging</option>
+            </select>
           </div>
         </div>
-
-        <div className="flex items-center justify-end gap-3">
-          <Button variant="secondary" size="md" onClick={resetDraft}>Cancel</Button>
-          <Button variant="primary" size="md" onClick={saveSet}>{editingId ? 'Update Quiz Set' : 'Save Quiz Set'}</Button>
+        <div className="flex items-center justify-end gap-3 mt-2">
+          <Button variant="secondary" size="md" onClick={resetDraft} disabled={saving}>Cancel</Button>
+          <Button variant="primary" size="md" onClick={saveSet} disabled={saving}>
+            {saving
+              ? <><span className="w-3.5 h-3.5 border border-white border-t-transparent rounded-full animate-spin inline-block mr-2" />Saving…</>
+              : editingId ? 'Update Quiz Set' : 'Save Quiz Set'
+            }
+          </Button>
         </div>
       </Modal>
 
-      <Modal isOpen={Boolean(questionBuilderSetId)} onClose={() => setQuestionBuilderSetId(null)} title={builderSet ? `Add Questions - ${builderSet.title}` : 'Add Questions'} subtitle="Add the actual questions and answer choices for this quiz set." maxWidth="2xl">
+      {/* ── Question builder modal ── */}
+      <Modal
+        isOpen={Boolean(questionBuilderSetId)}
+        onClose={() => setQuestionBuilderSetId(null)}
+        title={builderSet ? `Questions — ${builderSet.title}` : 'Add Questions'}
+        subtitle={`Questions here go live immediately. Students see all saved questions when they take the quiz.`}
+        maxWidth="2xl"
+      >
         <div className="space-y-5">
+          {/* New question form */}
           <div className="space-y-4 rounded-2xl border border-[#E1EFF7] bg-[#F9FCFF] p-4">
+            <p className="text-xs font-bold text-[#2C3E50] uppercase tracking-wider">Add a new question</p>
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-[#2C3E50] mb-2">Question prompt</label>
               <textarea value={questionForm.prompt} onChange={(e) => setQuestionForm({ ...questionForm, prompt: e.target.value })} rows={3} className="w-full rounded-xl border border-[#D6ECFA] bg-white px-3 py-2.5 text-sm text-[#2C3E50] focus:outline-none focus:ring-2 focus:ring-[#3498DB]" placeholder="Enter the question text here..." />
@@ -881,38 +1029,70 @@ const QuizManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }>
                   <option value="D">D</option>
                 </select>
               </div>
-
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-[#2C3E50] mb-2">Explanation</label>
-                <input value={questionForm.explanation} onChange={(e) => setQuestionForm({ ...questionForm, explanation: e.target.value })} className="w-full rounded-xl border border-[#D6ECFA] bg-white px-3 py-2.5 text-sm text-[#2C3E50] focus:outline-none focus:ring-2 focus:ring-[#3498DB]" placeholder="Optional explanation" />
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#2C3E50] mb-2">Explanation (optional)</label>
+                <input value={questionForm.explanation} onChange={(e) => setQuestionForm({ ...questionForm, explanation: e.target.value })} className="w-full rounded-xl border border-[#D6ECFA] bg-white px-3 py-2.5 text-sm text-[#2C3E50] focus:outline-none focus:ring-2 focus:ring-[#3498DB]" placeholder="Why is this the correct answer?" />
               </div>
             </div>
 
             <div className="flex justify-end">
-              <Button variant="primary" size="md" onClick={addQuestionToSet}>Add Question</Button>
+              <Button variant="primary" size="md" onClick={addQuestionToSet} disabled={saving}>
+                {saving
+                  ? <><span className="w-3.5 h-3.5 border border-white border-t-transparent rounded-full animate-spin inline-block mr-2" />Saving…</>
+                  : <><i className="bi bi-cloud-upload mr-1.5" aria-hidden="true" />Save to Supabase</>
+                }
+              </Button>
             </div>
           </div>
 
+          {/* Question list */}
           <div className="space-y-3">
-            <div className="text-xs font-bold uppercase tracking-wider text-[#2C3E50]">Questions in this set</div>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold uppercase tracking-wider text-[#2C3E50]">
+                Saved questions ({builderQuestions.length})
+              </p>
+              {builderQuestions.length > 0 && (
+                <span className="text-[11px] text-emerald-600 font-semibold">
+                  <i className="bi bi-check-circle-fill mr-1" />Live for students
+                </span>
+              )}
+            </div>
+
             {builderQuestions.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-[#D6ECFA] bg-white p-5 text-sm text-[#64748B] text-center">No questions added yet.</div>
+              <div className="rounded-xl border border-dashed border-[#D6ECFA] bg-white p-5 text-sm text-[#64748B] text-center">
+                No questions saved yet. Add one above.
+              </div>
             ) : (
               builderQuestions.map((question, index) => (
                 <div key={question.id} className="rounded-xl border border-[#E1EFF7] bg-white p-4">
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <span className="text-xs font-bold uppercase tracking-wider text-[#3498DB]">Question {index + 1}</span>
-                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#D6ECFA] text-[#2C3E50]">Correct: {question.correctAnswer}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        Correct: {question.correctAnswer}
+                      </span>
+                      <button
+                        onClick={() => removeQuestion(questionBuilderSetId!, question.id)}
+                        className="text-[11px] text-red-500 hover:text-red-700 px-2 py-0.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+                        aria-label="Delete question"
+                      >
+                        <i className="bi bi-trash" />
+                      </button>
+                    </div>
                   </div>
                   <div className="text-sm font-semibold text-[#2C3E50]">{question.prompt}</div>
                   <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-[#64748B]">
                     {question.options.map((option, optionIndex) => (
-                      <div key={optionIndex} className={`rounded-lg border px-2 py-1.5 ${question.correctAnswer === String.fromCharCode(65 + optionIndex) ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-[#E1EFF7] bg-[#F9FCFF]'}`}>
+                      <div key={optionIndex} className={`rounded-lg border px-2 py-1.5 ${question.correctAnswer === String.fromCharCode(65 + optionIndex) ? 'border-emerald-200 bg-emerald-50 text-emerald-700 font-semibold' : 'border-[#E1EFF7] bg-[#F9FCFF]'}`}>
                         {String.fromCharCode(65 + optionIndex)}. {option}
                       </div>
                     ))}
                   </div>
-                  {question.explanation && <div className="mt-2 text-xs text-[#64748B]">Explanation: {question.explanation}</div>}
+                  {question.explanation && (
+                    <div className="mt-2 text-xs text-[#64748B] italic">
+                      <i className="bi bi-lightbulb mr-1" />Explanation: {question.explanation}
+                    </div>
+                  )}
                 </div>
               ))
             )}

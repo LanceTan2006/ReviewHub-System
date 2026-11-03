@@ -145,6 +145,7 @@ create table if not exists public.quiz_sets (
   subject text not null,
   description text,
   difficulty text not null default 'Moderate' check (difficulty in ('Easy','Moderate','Challenging')),
+  item_count integer not null default 0,
   total_questions integer not null default 0,
   created_by uuid references public.profiles(id) on delete set null,
   created_at timestamptz not null default now()
@@ -152,13 +153,15 @@ create table if not exists public.quiz_sets (
 
 create table if not exists public.quiz_questions (
   id uuid primary key default gen_random_uuid(),
-  set_id uuid references public.quiz_sets(id) on delete cascade,
+  quiz_set_id uuid not null references public.quiz_sets(id) on delete cascade,
+  set_id uuid references public.quiz_sets(id) on delete cascade,  -- legacy alias, kept for compat
   subject text not null,
   difficulty text not null check (difficulty in ('Easy','Moderate','Challenging')),
   question text not null,
   options text[] not null,
   correct_index integer not null check (correct_index >= 0),
   explanation text,
+  item_order integer not null default 0,
   created_at timestamptz not null default now()
 );
 

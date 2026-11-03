@@ -15,6 +15,7 @@ export interface QuizSet {
   subject: string;
   difficulty: string;
   description?: string;
+  item_count: number;
   total_questions: number;
   created_at?: string;
 }
@@ -53,6 +54,7 @@ export async function createQuizSet(payload: {
       difficulty: payload.difficulty,
       package_id: payload.packageId ?? null,
       created_by: payload.createdBy ?? null,
+      item_count: 0,
       total_questions: 0,
     }])
     .select('*')
@@ -94,10 +96,11 @@ export async function fetchQuizQuestions(setId?: string, subject?: string): Prom
   if (!supabase) return [];
 
   try {
-    let query = supabase.from('quiz_questions').select('*').order('created_at', { ascending: true });
+    let query = supabase.from('quiz_questions').select('*').order('item_order', { ascending: true });
 
     if (setId) {
-      query = query.eq('set_id', setId);
+      // quiz_set_id is the live not-null column; set_id is the legacy alias
+      query = query.or(`quiz_set_id.eq.${setId},set_id.eq.${setId}`);
     }
     if (subject && subject !== 'All') {
       query = query.eq('subject', subject);
@@ -135,13 +138,15 @@ export async function createQuizQuestion(payload: {
   const { data, error } = await supabase
     .from('quiz_questions')
     .insert([{
-      set_id: payload.setId,
+      quiz_set_id: payload.setId,   // live not-null column
+      set_id: payload.setId,        // legacy alias kept in sync
       subject: payload.subject,
       difficulty: payload.difficulty,
       question: payload.question,
       options: payload.options,
       correct_index: payload.correctIndex,
       explanation: payload.explanation ?? '',
+      item_order: 0,
     }])
     .select('id')
     .single();
@@ -151,31 +156,65 @@ export async function createQuizQuestion(payload: {
     return null;
   }
 
-  // Increment total_questions on the parent set
-  await supabase.rpc('increment_quiz_set_count', { set_id_arg: payload.setId }).catch(() => {
-    // If the RPC doesn't exist yet, fall back to a manual update
-    supabase!
-      .from('quiz_sets')
-      .select('total_questions')
-      .eq('id', payload.setId)
-      .single()
-      .then(({ data: setData }) => {
-        if (setData) {
-          supabase!
-            .from('quiz_sets')
-            .update({ total_questions: (setData.total_questions ?? 0) + 1 })
-            .eq('id', payload.setId);
-        }
-      });
-  });
+  // Increment both counters on the parent set (fire-and-forget)
+  void (async () => {
+    try {
+      const { data: setData } = await supabase!
+        .from('quiz_sets')
+        .select('total_questions, item_count')
+        .eq('id', payload.setId)
+        .single();
+      if (setData) {
+        await supabase!
+          .from('quiz_sets')
+          .update({
+            total_questions: (setData.total_questions ?? 0) + 1,
+            item_count:      (setData.item_count      ?? 0) + 1,
+          })
+          .eq('id', payload.setId);
+      }
+    } catch { /* non-critical */ }
+  })();
 
   return data.id;
 }
 
 export async function deleteQuizQuestion(questionId: string): Promise<boolean> {
   if (!supabase) return false;
+
+  // Look up which set this question belongs to before deleting
+  const { data: qData } = await supabase
+    .from('quiz_questions')
+    .select('quiz_set_id, set_id')
+    .eq('id', questionId)
+    .single();
+
   const { error } = await supabase.from('quiz_questions').delete().eq('id', questionId);
   if (error) { console.warn('deleteQuizQuestion error:', error.message); return false; }
+
+  // Decrement counters on parent set (fire-and-forget)
+  const parentSetId = qData?.quiz_set_id ?? qData?.set_id;
+  if (parentSetId) {
+    void (async () => {
+      try {
+        const { data: setData } = await supabase!
+          .from('quiz_sets')
+          .select('total_questions, item_count')
+          .eq('id', parentSetId)
+          .single();
+        if (setData && setData.total_questions > 0) {
+          await supabase!
+            .from('quiz_sets')
+            .update({
+              total_questions: setData.total_questions - 1,
+              item_count: Math.max(0, (setData.item_count ?? 0) - 1),
+            })
+            .eq('id', parentSetId);
+        }
+      } catch { /* non-critical */ }
+    })();
+  }
+
   return true;
 }
 

@@ -24,6 +24,7 @@ const ROLE_COLORS: Record<UserRole, string> = {
   frontdesk: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   proctor:   'bg-amber-50 text-amber-700 border-amber-200',
   manager:   'bg-purple-50 text-purple-700 border-purple-200',
+  admin:     'bg-indigo-50 text-indigo-700 border-indigo-200',
 };
 
 const ROLE_ICONS: Record<UserRole, string> = {
@@ -32,6 +33,7 @@ const ROLE_ICONS: Record<UserRole, string> = {
   frontdesk: 'bi-person-badge',
   proctor:   'bi-journal-check',
   manager:   'bi-shield-fill-check',
+  admin:     'bi-shield-shaded',
 };
 
 // Seed data sourced from MOCK_USERS in rbac.ts
@@ -79,7 +81,7 @@ export const UserManagementPage: React.FC<UserManagementPageProps> = ({
       const mapped = data.map((profile: any) => {
         const roles = (profile.user_roles ?? [])
           .map((ur: any) => ur.roles?.name)
-          .filter((role): role is UserRole => Boolean(role) && ['student', 'frontdesk', 'proctor', 'manager'].includes(role));
+          .filter((role: any): role is UserRole => Boolean(role) && ['student', 'frontdesk', 'proctor', 'manager', 'admin'].includes(role));
 
         return {
           id: profile.id,
@@ -231,12 +233,20 @@ export const UserManagementPage: React.FC<UserManagementPageProps> = ({
         body: {
           email,
           full_name: name,
+          password: password || undefined,
           role_ids: [studentRole.id],
         },
       });
 
       if (inviteError) {
-        throw inviteError;
+        let errorMsg = inviteError.message;
+        if ((inviteError as any).context && typeof (inviteError as any).context.json === 'function') {
+          try {
+            const body = await (inviteError as any).context.json();
+            if (body?.error) errorMsg = body.error;
+          } catch {}
+        }
+        throw new Error(errorMsg || 'Unable to invite the student account through the protected admin flow.');
       }
 
       const serverUser = (inviteResult as { user?: { id?: string; email?: string; full_name?: string } } | null)?.user ?? null;
@@ -246,7 +256,7 @@ export const UserManagementPage: React.FC<UserManagementPageProps> = ({
       }
 
       setUsers((prev) => [{
-        id: serverUser.id,
+        id: String(serverUser.id),
         name: serverUser.full_name ?? name,
         email: serverUser.email ?? email,
         roles: ['student'],

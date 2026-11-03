@@ -11,6 +11,7 @@ import { AuthUser, hasPermission, PAGE_PERMISSIONS } from '../rbac';
 
 // ── Reused page components ─────────────────────────────────────
 import { LessonsPage }           from './LessonsPage';
+import { QuizPage }              from './QuizPage';
 import { PackagesPage }          from './PackagesPage';
 import { ProgressPage }          from './ProgressPage';
 import { CertificatesPage }      from './CertificatesPage';

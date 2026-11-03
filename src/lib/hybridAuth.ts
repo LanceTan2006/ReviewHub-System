@@ -12,7 +12,7 @@ const LOCAL_DEMO_USERS: Record<string, { name: string; password: string; roles: 
 
 function buildLocalPreviewAuthUser(email: string, name: string, roles: UserRole[]): AuthUser {
   const safeEmail = email.trim().toLowerCase();
-  const finalRoles = roles.length ? roles : ['student'];
+  const finalRoles: UserRole[] = roles.length ? roles : ['student'];
   return buildAuthUser(`local-${safeEmail.replace(/[^a-z0-9]/gi, '-')}`, name, safeEmail, finalRoles);
 }
 

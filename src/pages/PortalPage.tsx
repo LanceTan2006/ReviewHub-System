@@ -55,20 +55,54 @@ const AccessDenied: React.FC = () => (
   </div>
 );
 
+// ── Fallback announcements (shown when Supabase table is empty or unavailable) ─
+const FALLBACK_ANNOUNCEMENTS = [
+  { id: 1, title: 'November 2026 Board Exam Preparation Schedule Released', date: 'Oct 30, 2026', category: 'Academic', body: 'The November 2026 PRC Licensure Examination intensive review schedule has been finalized. Students enrolled in Batch Alpha are required to attend the Saturday diagnostic mock exams starting November 2.', important: true },
+  { id: 2, title: 'AI Reviewer Engine Updated — Gemini 2.0 Flash Integration', date: 'Oct 28, 2026', category: 'System', body: 'The AI Reviewer has been upgraded to Gemini 2.0 Flash. Upload your PDF notes and receive richer, more accurate summaries and flashcard sets. Response time reduced by 40%.', important: false },
+  { id: 3, title: 'Holiday Schedule — November 1–2 Suspension of Classes', date: 'Oct 25, 2026', category: 'Calendar', body: "In observance of All Saints' Day and All Souls' Day, all live Q&A sessions and on-site review classes will be suspended on November 1–2. Online AI Reviewer and self-paced modules remain available 24/7.", important: false },
+  { id: 4, title: 'GCash & Maya Payment Processing — Scheduled Maintenance', date: 'Oct 22, 2026', category: 'Finance', body: 'GCash and Maya payment gateways will undergo scheduled maintenance on October 31 from 12:00 AM to 6:00 AM PHT. Please process tuition payments before or after this window.', important: false },
+];
+
 // ── Shared: Announcements board ────────────────────────────────
 const AnnouncementsPage: React.FC<{ role: string; userName: string }> = ({ role, userName }) => {
-  const announcements = [
-    { id: 1, title: 'November 2026 Board Exam Preparation Schedule Released', date: 'Oct 30, 2026', category: 'Academic', body: 'The November 2026 PRC Licensure Examination intensive review schedule has been finalized. Students enrolled in Batch Alpha are required to attend the Saturday diagnostic mock exams starting November 2.', important: true },
-    { id: 2, title: 'AI Reviewer Engine Updated — Gemini 2.0 Flash Integration', date: 'Oct 28, 2026', category: 'System', body: 'The AI Reviewer has been upgraded to Gemini 2.0 Flash. Upload your PDF notes and receive richer, more accurate summaries and flashcard sets. Response time reduced by 40%.', important: false },
-    { id: 3, title: 'Holiday Schedule — November 1–2 Suspension of Classes', date: 'Oct 25, 2026', category: 'Calendar', body: 'In observance of All Saints\' Day and All Souls\' Day, all live Q&A sessions and on-site review classes will be suspended on November 1–2. Online AI Reviewer and self-paced modules remain available 24/7.', important: false },
-    { id: 4, title: 'GCash & Maya Payment Processing — Scheduled Maintenance', date: 'Oct 22, 2026', category: 'Finance', body: 'GCash and Maya payment gateways will undergo scheduled maintenance on October 31 from 12:00 AM to 6:00 AM PHT. Please process tuition payments before or after this window.', important: false },
-  ];
+  const [announcements, setAnnouncements] = React.useState(FALLBACK_ANNOUNCEMENTS);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    fetchAnnouncements(role).then((data) => {
+      if (!isMounted) return;
+      if (data && data.length > 0) {
+        setAnnouncements(
+          data.map((item, idx) => ({
+            id: idx + 1,
+            title: item.title,
+            date: new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            category: item.audience === 'all' ? 'General' : item.audience.charAt(0).toUpperCase() + item.audience.slice(1),
+            body: item.body,
+            important: idx === 0, // Pin the most recent announcement
+          }))
+        );
+      }
+      setLoading(false);
+    }).catch(() => {
+      if (isMounted) setLoading(false);
+    });
+    return () => { isMounted = false; };
+  }, [role]);
+
   const catColors: Record<string, string> = {
     Academic: 'bg-blue-50 text-blue-700 border-blue-200',
     System:   'bg-purple-50 text-purple-700 border-purple-200',
     Calendar: 'bg-amber-50 text-amber-700 border-amber-200',
     Finance:  'bg-emerald-50 text-emerald-700 border-emerald-200',
+    General:  'bg-gray-50 text-gray-600 border-gray-200',
+    Student:  'bg-blue-50 text-blue-700 border-blue-200',
+    Frontdesk:'bg-emerald-50 text-emerald-700 border-emerald-200',
+    Proctor:  'bg-amber-50 text-amber-700 border-amber-200',
+    Manager:  'bg-purple-50 text-purple-700 border-purple-200',
   };
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-12">
       <div className="bg-white p-6 rounded-2xl border border-[#E1EFF7] flex items-start gap-4">
@@ -80,27 +114,34 @@ const AnnouncementsPage: React.FC<{ role: string; userName: string }> = ({ role,
           <p className="text-sm text-[#64748B] mt-1">Latest updates from Meliora Learning Hub for {userName}.</p>
         </div>
       </div>
-      <div className="space-y-4">
-        {announcements.map((a) => (
-          <div key={a.id} className={`p-5 rounded-2xl border bg-white ${a.important ? 'border-[#3498DB] shadow-sm' : 'border-[#E1EFF7]'}`}>
-            <div className="flex items-start justify-between gap-3 mb-2">
-              <div className="flex items-center gap-2 flex-wrap">
-                {a.important && (
-                  <span className="text-[11px] font-bold bg-[#3498DB] text-white px-2 py-0.5 rounded-full">
-                    <i className="bi bi-pin-fill mr-1" aria-hidden="true" />Pinned
+
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="w-7 h-7 border-2 border-[#3498DB] border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {announcements.map((a) => (
+            <div key={a.id} className={`p-5 rounded-2xl border bg-white ${a.important ? 'border-[#3498DB] shadow-sm' : 'border-[#E1EFF7]'}`}>
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {a.important && (
+                    <span className="text-[11px] font-bold bg-[#3498DB] text-white px-2 py-0.5 rounded-full">
+                      <i className="bi bi-pin-fill mr-1" aria-hidden="true" />Pinned
+                    </span>
+                  )}
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${catColors[a.category] ?? 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                    {a.category}
                   </span>
-                )}
-                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${catColors[a.category] ?? 'bg-gray-50 text-gray-600 border-gray-200'}`}>
-                  {a.category}
-                </span>
+                </div>
+                <span className="text-xs text-[#94A3B8] shrink-0">{a.date}</span>
               </div>
-              <span className="text-xs text-[#94A3B8] shrink-0">{a.date}</span>
+              <h3 className="text-sm font-bold text-[#2C3E50] mb-1.5">{a.title}</h3>
+              <p className="text-xs text-[#64748B] leading-relaxed">{a.body}</p>
             </div>
-            <h3 className="text-sm font-bold text-[#2C3E50] mb-1.5">{a.title}</h3>
-            <p className="text-xs text-[#64748B] leading-relaxed">{a.body}</p>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

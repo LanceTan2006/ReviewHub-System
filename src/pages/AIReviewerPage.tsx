@@ -1,9 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ActivePage, Flashcard, ChatMessage } from '../types';
 import { sampleFlashcards, sampleSummaryContent } from '../data/mockData';
 import { Card, CardBody, CardHeader } from '../components/Card';
 import { Button } from '../components/Button';
 import { Modal } from '../components/Modal';
+import {
+  createAiChatSession,
+  fetchAiChatMessages,
+  saveAiChatMessage,
+} from '../lib/services/aiChat';
 import {
   Sparkles,
   UploadCloud,
@@ -26,12 +31,17 @@ import {
 interface AIReviewerPageProps {
   onNavigate: (page: ActivePage) => void;
   onShowToast: (title: string, description?: string, type?: 'success' | 'error' | 'info') => void;
+  /** Logged-in user's Supabase profile ID — used to persist chat sessions */
+  userId?: string;
 }
 
 export const AIReviewerPage: React.FC<AIReviewerPageProps> = ({
   onNavigate,
   onShowToast,
+  userId,
 }) => {
+  // Active Supabase chat session ID (null = not persisted / no Supabase)
+  const sessionIdRef = useRef<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'msg-1',
@@ -74,6 +84,14 @@ export const AIReviewerPage: React.FC<AIReviewerPageProps> = ({
   const [userMiniQuizAnswers, setUserMiniQuizAnswers] = useState<Record<number, number>>({});
   const [miniQuizSubmitted, setMiniQuizSubmitted] = useState(false);
 
+  // ── Create a Supabase AI chat session on mount (if userId is available) ──
+  useEffect(() => {
+    if (!userId) return;
+    createAiChatSession(userId, 'AI Reviewer Session').then((id) => {
+      if (id) sessionIdRef.current = id;
+    });
+  }, [userId]);
+
   const miniQuiz = [
     {
       id: 1,
@@ -106,6 +124,11 @@ export const AIReviewerPage: React.FC<AIReviewerPageProps> = ({
     setInputMessage('');
     setIsTyping(true);
 
+    // Persist user message to Supabase (fire-and-forget)
+    if (sessionIdRef.current) {
+      saveAiChatMessage(sessionIdRef.current, 'user', userMsg.text);
+    }
+
     setTimeout(() => {
       let aiResponseText = `I have analyzed your request based on "${uploadedFile}". In board exams, examiners frequently test this topic. Make sure to remember the underlying boundary assumptions and keep units in SI.`;
       let suggestedAction: ChatMessage['suggestedAction'] = undefined;
@@ -121,17 +144,21 @@ export const AIReviewerPage: React.FC<AIReviewerPageProps> = ({
         suggestedAction = { label: 'View Generated Summary', actionType: 'summary' };
       }
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `msg-ai-${Date.now()}`,
-          sender: 'ai',
-          text: aiResponseText,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          suggestedAction,
-        },
-      ]);
+      const aiMsg: ChatMessage = {
+        id: `msg-ai-${Date.now()}`,
+        sender: 'ai',
+        text: aiResponseText,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        suggestedAction,
+      };
+
+      setMessages((prev) => [...prev, aiMsg]);
       setIsTyping(false);
+
+      // Persist AI response to Supabase (fire-and-forget)
+      if (sessionIdRef.current) {
+        saveAiChatMessage(sessionIdRef.current, 'ai', aiMsg.text);
+      }
     }, 700);
   };
 

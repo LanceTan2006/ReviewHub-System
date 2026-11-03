@@ -35,12 +35,15 @@ interface QuizPageProps {
    * Defaults to 'practice' for backward compatibility.
    */
   mode?: 'practice' | 'mock';
+  /** Logged-in user's Supabase profile ID — used to record quiz attempts */
+  userId?: string;
 }
 
 export const QuizPage: React.FC<QuizPageProps> = ({
   onNavigate,
   onShowToast,
   mode = 'practice',
+  userId,
 }) => {
   const isMock = mode === 'mock';
 
@@ -48,9 +51,49 @@ export const QuizPage: React.FC<QuizPageProps> = ({
   // IELTS toggle only available in practice mode
   const [testMode, setTestMode] = useState<'general' | 'ielts'>('general');
 
-  const allQuestions = testMode === 'ielts' ? sampleIeltsQuestions : sampleQuizQuestions;
-  // Practice = 5 questions; Mock = all questions (simulate full exam)
-  const questions = isMock ? allQuestions : allQuestions.slice(0, 5);
+  // ── Question bank — load from Supabase, fall back to mock data ──
+  const [questionBank, setQuestionBank] = useState<QuizQuestion[]>([]);
+  const [loadingQuestions, setLoadingQuestions] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    setLoadingQuestions(true);
+    setQuestionBank([]);
+
+    async function loadQuestions() {
+      try {
+        // Try Supabase first
+        const dbQuestions = await fetchQuizQuestions(
+          undefined,
+          testMode === 'ielts' ? 'IELTS' : undefined
+        );
+        if (isMounted) {
+          if (dbQuestions && dbQuestions.length > 0) {
+            setQuestionBank(dbQuestions);
+          } else {
+            // Fall back to mock data
+            setQuestionBank(
+              testMode === 'ielts' ? sampleIeltsQuestions : sampleQuizQuestions
+            );
+          }
+        }
+      } catch {
+        if (isMounted) {
+          setQuestionBank(
+            testMode === 'ielts' ? sampleIeltsQuestions : sampleQuizQuestions
+          );
+        }
+      } finally {
+        if (isMounted) setLoadingQuestions(false);
+      }
+    }
+
+    loadQuestions();
+    return () => { isMounted = false; };
+  }, [testMode]);
+
+  // Practice = 5 questions max; Mock = all
+  const questions = isMock ? questionBank : questionBank.slice(0, 5);
 
   // Timer: practice = 15 min, mock = 60 min
   const TIMER_DURATION = isMock ? 60 * 60 : 15 * 60;
@@ -105,6 +148,15 @@ export const QuizPage: React.FC<QuizPageProps> = ({
     setIsSubmitted(true);
     setIsTimerRunning(false);
     onShowToast('Exam Submitted!', 'Your performance has been graded with full rationales.', 'success');
+
+    // Record quiz attempt in Supabase (fire-and-forget)
+    if (userId) {
+      const correct = questions.filter((q) => userAnswers[q.id] === q.correctIndex).length;
+      const pct     = Math.round((correct / questions.length) * 100);
+      recordQuizAttempt(userId, correct, questions.length, pct >= 75).catch(() => {
+        // Silently ignore — non-critical persistence
+      });
+    }
   };
 
   const handleRetake = () => {

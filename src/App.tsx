@@ -263,14 +263,14 @@ export default function App() {
     if (!authUser) return null;
 
     // ── Student pages with real components ──
-    if (currentPage === 'student-dashboard')  return <StudentDashboard onNavigate={safeNavigate} onShowToast={showToast} />;
+    if (currentPage === 'student-dashboard')  return <StudentDashboard onNavigate={safeNavigate} onShowToast={showToast} lessons={lessons} userName={authUser?.name} />;
     if (currentPage === 'student-lessons')    return <LessonsPage onNavigate={safeNavigate} onShowToast={showToast} />;
     if (currentPage === 'student-packages')   return <PackagesPage onNavigate={safeNavigate} onShowToast={showToast} packages={packages} />;
     if (currentPage === 'student-enrollment' || currentPage === 'student-payment')
       return <StudentEnrollmentPage onNavigate={safeNavigate} onShowToast={showToast} packages={packages} onEnrollComplete={handleEnrollComplete} />;
-    if (currentPage === 'ai-reviewer')        return <AIReviewerPage onNavigate={safeNavigate} onShowToast={showToast} />;
-    if (currentPage === 'quiz')               return <QuizPage onNavigate={safeNavigate} onShowToast={showToast} mode="practice" />;
-    if (currentPage === 'student-mock-exam')  return <QuizPage onNavigate={safeNavigate} onShowToast={showToast} mode="mock" />;
+    if (currentPage === 'ai-reviewer')        return <AIReviewerPage onNavigate={safeNavigate} onShowToast={showToast} userId={authUser?.id} />;
+    if (currentPage === 'quiz')               return <QuizPage onNavigate={safeNavigate} onShowToast={showToast} mode="practice" userId={authUser?.id} />;
+    if (currentPage === 'student-mock-exam')  return <QuizPage onNavigate={safeNavigate} onShowToast={showToast} mode="mock" userId={authUser?.id} />;
     if (currentPage === 'student-progress')   return <ProgressPage onNavigate={safeNavigate} onShowToast={showToast} />;
     if (currentPage === 'student-certificates') return <CertificatesPage onNavigate={safeNavigate} onShowToast={showToast} />;
 

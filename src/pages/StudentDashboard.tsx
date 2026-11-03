@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActivePage } from '../types';
+import { ActivePage, Lesson } from '../types';
 import { sampleLessons } from '../data/mockData';
 import { Card, CardBody, CardHeader } from '../components/Card';
 import { Button } from '../components/Button';
@@ -25,15 +25,24 @@ import {
 interface StudentDashboardProps {
   onNavigate: (page: ActivePage) => void;
   onShowToast: (title: string, description?: string, type?: 'success' | 'error' | 'info') => void;
+  /** Real lessons from Supabase, passed from App.tsx. Falls back to mock data when empty. */
+  lessons?: Lesson[];
+  /** Logged-in user's display name */
+  userName?: string;
 }
 
 export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   onNavigate,
   onShowToast,
+  lessons: propLessons,
+  userName,
 }) => {
   const [activeTab, setActiveTab] = useState<'all' | 'in-progress' | 'completed'>('all');
 
-  const filteredLessons = sampleLessons.filter((lesson) => {
+  // Use real lessons from Supabase if available, else fall back to mock data
+  const lessonSource = (propLessons && propLessons.length > 0) ? propLessons : sampleLessons;
+
+  const filteredLessons = lessonSource.filter((lesson) => {
     if (activeTab === 'in-progress') return !lesson.completed && lesson.progressPercent > 0;
     if (activeTab === 'completed') return lesson.completed;
     return true;
@@ -57,7 +66,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             <span>14-Day Study Streak Active · Meliora Student Space</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-[#2C3E50] tracking-tight">
-            Welcome back, Student! 👋
+            Welcome back, {userName ? userName.split(' ')[0] : 'Student'}! 👋
           </h1>
           <p className="text-xs sm:text-sm text-[#64748B] mt-1">
             Your personalized study pathway is 74% complete. Keep momentum toward your target exam!
@@ -164,10 +173,11 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             </div>
             <div>
               <div className="text-2xl font-extrabold font-mono tabular-nums text-[#2C3E50]">
-                48 <span className="text-xs font-normal text-[#64748B]">/ 65</span>
+                {lessonSource.filter((l) => l.completed).length}{' '}
+                <span className="text-xs font-normal text-[#64748B]">/ {lessonSource.length}</span>
               </div>
               <div className="text-[11px] text-[#64748B] mt-1">
-                17 remaining in curriculum
+                {lessonSource.length - lessonSource.filter((l) => l.completed).length} remaining in curriculum
               </div>
             </div>
             <button

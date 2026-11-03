@@ -593,11 +593,7 @@ const QuizManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }>
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [sets, setSets] = useState([
-    { id: 'q-1', title: 'Foundations Review', subject: 'General Engineering Sciences', count: 18, difficulty: 'Moderate', lastUpdated: 'Nov 03, 2026' },
-    { id: 'q-2', title: 'IEC Reading Drill', subject: 'IELTS Reading', count: 12, difficulty: 'Easy', lastUpdated: 'Nov 01, 2026' },
-    { id: 'q-3', title: 'Ethics Quick Check', subject: 'Professional Practice', count: 15, difficulty: 'Challenging', lastUpdated: 'Oct 28, 2026' },
-  ]);
+  const [sets, setSets] = useState<Array<{ id: string; title: string; subject: string; count: number; difficulty: string; lastUpdated: string }>>([]);
   const [draft, setDraft] = useState({ title: '', subject: '', difficulty: 'Moderate', count: '12' });
 
   const filtered = sets.filter((q) =>
@@ -673,40 +669,55 @@ const QuizManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }>
           className="w-full pl-10 pr-4 py-2 text-sm rounded-xl border border-[#D6ECFA] focus:outline-none focus:ring-2 focus:ring-[#3498DB] bg-white" />
       </div>
 
-      <Card className="border-[#E1EFF7]">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="bg-[#F4FAFD] border-b border-[#E1EFF7] text-[11px] font-bold text-[#64748B] uppercase tracking-wider">
-                <th className="py-3 px-5">Title</th>
-                <th className="py-3 px-5">Subject</th>
-                <th className="py-3 px-5">Questions</th>
-                <th className="py-3 px-5">Difficulty</th>
-                <th className="py-3 px-5">Last Updated</th>
-                <th className="py-3 px-5 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#F0F6FA]">
-              {filtered.map((q) => (
-                <tr key={q.id} className="hover:bg-[#FAFDFE]">
-                  <td className="py-3.5 px-5 font-semibold text-[#2C3E50]">{q.title}</td>
-                  <td className="py-3.5 px-5 text-[#2C3E50]">{q.subject}</td>
-                  <td className="py-3.5 px-5 font-mono text-[#2C3E50]">{q.count} items</td>
-                  <td className="py-3.5 px-5">
-                    <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${diffColor[q.difficulty]}`}>{q.difficulty}</span>
-                  </td>
-                  <td className="py-3.5 px-5 text-[#64748B]">{q.lastUpdated}</td>
-                  <td className="py-3.5 px-5 text-right">
-                    <Button variant="secondary" size="sm" onClick={() => openEdit(q)}>
-                      <i className="bi bi-pencil mr-1" aria-hidden="true" />Edit
-                    </Button>
-                  </td>
+      {filtered.length === 0 ? (
+        <Card className="border-dashed border-[#D6ECFA] bg-[#F9FCFF]">
+          <CardBody className="p-10 text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#D6ECFA] text-[#3498DB] text-2xl">
+              <i className="bi bi-question-circle" aria-hidden="true" />
+            </div>
+            <h3 className="text-lg font-bold text-[#2C3E50]">No quiz sets yet</h3>
+            <p className="mt-2 text-sm text-[#64748B]">Create the first quiz bank for a subject and add the question set later in Supabase.</p>
+            <div className="mt-5 flex justify-center">
+              <Button variant="primary" size="md" onClick={openCreate}>Create Quiz Set</Button>
+            </div>
+          </CardBody>
+        </Card>
+      ) : (
+        <Card className="border-[#E1EFF7]">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-[#F4FAFD] border-b border-[#E1EFF7] text-[11px] font-bold text-[#64748B] uppercase tracking-wider">
+                  <th className="py-3 px-5">Title</th>
+                  <th className="py-3 px-5">Subject</th>
+                  <th className="py-3 px-5">Questions</th>
+                  <th className="py-3 px-5">Difficulty</th>
+                  <th className="py-3 px-5">Last Updated</th>
+                  <th className="py-3 px-5 text-right">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+              </thead>
+              <tbody className="divide-y divide-[#F0F6FA]">
+                {filtered.map((q) => (
+                  <tr key={q.id} className="hover:bg-[#FAFDFE]">
+                    <td className="py-3.5 px-5 font-semibold text-[#2C3E50]">{q.title}</td>
+                    <td className="py-3.5 px-5 text-[#2C3E50]">{q.subject}</td>
+                    <td className="py-3.5 px-5 font-mono text-[#2C3E50]">{q.count} items</td>
+                    <td className="py-3.5 px-5">
+                      <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${diffColor[q.difficulty]}`}>{q.difficulty}</span>
+                    </td>
+                    <td className="py-3.5 px-5 text-[#64748B]">{q.lastUpdated}</td>
+                    <td className="py-3.5 px-5 text-right">
+                      <Button variant="secondary" size="sm" onClick={() => openEdit(q)}>
+                        <i className="bi bi-pencil mr-1" aria-hidden="true" />Edit
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       <Modal isOpen={isModalOpen} onClose={resetDraft} title={editingId ? 'Edit Question Set' : 'Create Question Set'} subtitle="Create or update a quiz question bank for a subject area." maxWidth="md">
         <div className="space-y-4">
@@ -750,11 +761,7 @@ const QuizManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }>
 const MockExamManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'] }> = ({ onShowToast }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [exams, setExams] = useState([
-    { id: 'ex-1', title: 'Diagnostic Mock Exam 1', date: 'Nov 2, 2026', duration: '4 hours', takers: 248, avg: '78.4%', status: 'Scheduled' },
-    { id: 'ex-2', title: 'Diagnostic Mock Exam 2', date: 'Nov 9, 2026', duration: '4 hours', takers: 0, avg: '—', status: 'Draft' },
-    { id: 'ex-3', title: 'Full PRC Simulation', date: 'Oct 18, 2026', duration: '5 hours', takers: 231, avg: '82.1%', status: 'Completed' },
-  ]);
+  const [exams, setExams] = useState<Array<{ id: string; title: string; date: string; duration: string; takers: number; avg: string; status: string }>>([]);
   const [draft, setDraft] = useState({ title: '', date: '', duration: '4 hours', takers: '0', avg: '—', status: 'Draft' });
 
   const statusColors: Record<string, string> = {
@@ -818,26 +825,41 @@ const MockExamManagerPage: React.FC<{ onShowToast: PortalPageProps['onShowToast'
           <i className="bi bi-plus-lg mr-1.5" aria-hidden="true" />Create Mock Exam
         </Button>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {exams.map((e) => (
-          <Card key={e.id} className="border-[#E1EFF7]">
-            <CardBody className="p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${statusColors[e.status]}`}>{e.status}</span>
-                <span className="text-[11px] text-[#64748B]">{e.duration}</span>
-              </div>
-              <h3 className="text-sm font-bold text-[#2C3E50]">{e.title}</h3>
-              <div className="text-xs text-[#64748B] space-y-1">
-                <div><i className="bi bi-calendar3 mr-1" aria-hidden="true" />{e.date}</div>
-                <div><i className="bi bi-people mr-1" aria-hidden="true" />{e.takers} takers · Avg: {e.avg}</div>
-              </div>
-              <Button variant="secondary" size="sm" className="w-full justify-center" onClick={() => openEdit(e)}>
-                {e.status === 'Completed' ? 'View Results' : 'Edit Exam'}
-              </Button>
-            </CardBody>
-          </Card>
-        ))}
-      </div>
+      {exams.length === 0 ? (
+        <Card className="border-dashed border-[#D6ECFA] bg-[#F9FCFF]">
+          <CardBody className="p-10 text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#D6ECFA] text-[#3498DB] text-2xl">
+              <i className="bi bi-file-earmark-ruled" aria-hidden="true" />
+            </div>
+            <h3 className="text-lg font-bold text-[#2C3E50]">No mock exams yet</h3>
+            <p className="mt-2 text-sm text-[#64748B]">Create the first mock exam and add question sets later when your Supabase database is ready.</p>
+            <div className="mt-5 flex justify-center">
+              <Button variant="primary" size="md" onClick={openCreate}>Create Mock Exam</Button>
+            </div>
+          </CardBody>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {exams.map((e) => (
+            <Card key={e.id} className="border-[#E1EFF7]">
+              <CardBody className="p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${statusColors[e.status]}`}>{e.status}</span>
+                  <span className="text-[11px] text-[#64748B]">{e.duration}</span>
+                </div>
+                <h3 className="text-sm font-bold text-[#2C3E50]">{e.title}</h3>
+                <div className="text-xs text-[#64748B] space-y-1">
+                  <div><i className="bi bi-calendar3 mr-1" aria-hidden="true" />{e.date}</div>
+                  <div><i className="bi bi-people mr-1" aria-hidden="true" />{e.takers} takers · Avg: {e.avg}</div>
+                </div>
+                <Button variant="secondary" size="sm" className="w-full justify-center" onClick={() => openEdit(e)}>
+                  {e.status === 'Completed' ? 'View Results' : 'Edit Exam'}
+                </Button>
+              </CardBody>
+            </Card>
+          ))}
+        </div>
+      )}
 
       <Modal isOpen={isModalOpen} onClose={resetDraft} title={editingId ? 'Edit Mock Exam' : 'Create Mock Exam'} subtitle="Set the scheduled exam date, time, and status." maxWidth="md">
         <div className="space-y-4">

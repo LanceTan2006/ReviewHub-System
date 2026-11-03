@@ -38,7 +38,8 @@ import {
   Play,
   Clock,
   QrCode,
-  FileText
+  FileText,
+  XCircle
 } from 'lucide-react';
 
 interface AdminDashboardProps {

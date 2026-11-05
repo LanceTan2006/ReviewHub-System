@@ -25,10 +25,10 @@ import { UserManagementPage }   from './pages/UserManagementPage';
 import { PortalPage }           from './pages/PortalPage';
 
 import { Menu, X } from 'lucide-react';
-import { logoutFromFirebase } from './lib/firebase';
 import { hydrateSupabaseSession } from './lib/hybridAuth';
 import { createLessonWithPdfs } from './lib/lessonMaterials';
 import { loadSiteData } from './lib/siteData';
+import { AuthCallback } from './pages/AuthCallback';
 import logoImg from './assets/images/reviewhub_logo.png';
 
 // ── Role colour / icon map for the portal header badge ─────────
@@ -137,12 +137,6 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    try {
-      await logoutFromFirebase();
-    } catch {
-      // Firebase may already be signed out or not configured.
-    }
-
     if (supabase) {
       await supabase.auth.signOut();
     }
@@ -319,6 +313,16 @@ export default function App() {
       />
     );
   };
+
+  // ── OAuth callback route ── Intercept before rendering anything else ──
+  if (typeof window !== 'undefined' && window.location.pathname === '/auth/callback') {
+    return (
+      <AuthCallback
+        onLoginSuccess={handleLoginSuccess}
+        onNavigate={(page) => { setCurrentPage(page); window.history.replaceState({}, '', '/'); }}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#F4FAFD] text-[#2C3E50] flex flex-col font-sans">

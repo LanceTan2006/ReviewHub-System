@@ -17,15 +17,23 @@ function buildLocalPreviewAuthUser(email: string, name: string, roles: UserRole[
 }
 
 function getOAuthRedirectUrl(): string {
-  const defaultProductionUrl = 'https://review-hub-system.vercel.app';
+  // Local development — redirect back to the Vite dev server
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return `${window.location.origin}/auth/callback`;
+    }
+  }
 
+  // Production
+  const defaultProductionUrl = 'https://review-hub-system.vercel.app';
   const configuredUrl =
     (import.meta.env.VITE_PUBLIC_APP_URL as string | undefined) ??
     (import.meta.env.VITE_APP_URL as string | undefined) ??
     (import.meta.env.APP_URL as string | undefined) ??
     defaultProductionUrl;
 
-  return configuredUrl.replace(/\/$/, '');
+  return configuredUrl.replace(/\/$/, '') + '/auth/callback';
 }
 
 export async function hydrateSupabaseSession(): Promise<AuthUser | null> {
@@ -273,6 +281,10 @@ export async function loginGoogleHybrid(): Promise<AuthUser> {
     provider: 'google',
     options: {
       redirectTo: getOAuthRedirectUrl(),
+      queryParams: {
+        access_type: 'offline',
+        prompt: 'consent',
+      },
     },
   });
 

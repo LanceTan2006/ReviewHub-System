@@ -79,7 +79,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       onLoginSuccess(user);
     } catch (error: any) {
       console.error('Google sign-in failed:', error);
-      setFormError(error?.message ?? 'Google sign-in failed. Please check your Firebase Google provider setup.');
+      setFormError(error?.message ?? 'Google sign-in failed. Please check your Supabase Google provider setup.');
     } finally {
       setIsLoading(false);
     }
@@ -104,7 +104,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         const normalizedEmail = email.trim().toLowerCase();
         await registerHybrid(normalizedEmail, password, name.trim() || normalizedEmail);
 
-        onShowToast('Account Created!', 'Your Firebase account was created and a matching Supabase profile was linked.', 'success');
+        onShowToast('Account Created!', 'Your Supabase account was created and your profile is linked.', 'success');
         setIsRegister(false);
         setPassword('');
         setConfirmPw('');
@@ -130,7 +130,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       onLoginSuccess(user);
     } catch (error: any) {
       console.error('Login failed:', error);
-      setFormError(error?.message ?? 'Unable to connect to the authentication service. Please verify your Firebase and Supabase configuration.');
+      setFormError(error?.message ?? 'Unable to connect to the authentication service. Please verify your Supabase configuration.');
     } finally {
       setIsLoading(false);
     }
